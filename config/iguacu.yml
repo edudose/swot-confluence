@@ -1,0 +1,119 @@
+# Monitor de regulación y precipitación — cuenca del río Iguazú
+#
+# Procedencia de cada valor:
+#   verificado   -> confirmado contra fuente oficial
+#   por_validar  -> deducido de fuentes secundarias; confirmar con `probe`/`discover`
+#   desconocido  -> hay que resolverlo con `discover`
+
+basin:
+  name: Rio Iguaçu
+  # Caja envolvente aproximada de la cuenca (nacientes cerca de Curitiba
+  # hasta la desembocadura en Foz do Iguaçu). Procedencia: por_validar.
+  # Para recortes finos, apuntar `polygon` a un GeoJSON de la divisoria real.
+  bbox: [-54.70, -26.90, -48.80, -24.90]   # [lon_min, lat_min, lon_max, lat_max]
+  polygon: null                            # p.ej. config/bacia_iguacu.geojson
+
+# ---------------------------------------------------------------------------
+# Regulación: cascada del Iguazú, de aguas arriba hacia aguas abajo
+# ---------------------------------------------------------------------------
+plants:
+  - key: foz_do_areia
+    name: Foz do Areia (Gov. Bento Munhoz da Rocha Neto)
+    operator: COPEL
+    copel_label: "FOZ DO AREIA"      # etiqueta en la página MHB (por_validar)
+    ons_label: "GOV. BENTO MUNHOZ"   # etiqueta en el dataset ONS (por_validar)
+    order: 1
+
+  - key: segredo
+    name: Segredo (Gov. Ney Aminthas de Barros Braga)
+    operator: COPEL
+    copel_label: "SEGREDO"
+    ons_label: "GOV. NEY A. B. BRAGA"
+    order: 2
+
+  - key: salto_santiago
+    name: Salto Santiago
+    operator: ENGIE
+    copel_label: null                # no es de COPEL: sólo vía ONS
+    ons_label: "SALTO SANTIAGO"
+    order: 3
+
+  - key: salto_osorio
+    name: Salto Osório
+    operator: ENGIE
+    copel_label: null
+    ons_label: "SALTO OSORIO"
+    order: 4
+
+  - key: salto_caxias
+    name: Salto Caxias (Gov. José Richa)
+    operator: COPEL
+    copel_label: "SALTO CAXIAS"
+    ons_label: "GOV. JOSE RICHA"
+    order: 5
+
+  - key: baixo_iguacu
+    name: Baixo Iguaçu
+    operator: NEOENERGIA
+    copel_label: null
+    ons_label: "BAIXO IGUACU"
+    order: 6
+
+# ---------------------------------------------------------------------------
+# Caudal observado
+# ---------------------------------------------------------------------------
+stations:
+  - key: porto_capanema
+    name: Porto Capanema
+    river: Rio Iguaçu
+    ana_code: null                   # desconocido -> resolver con `discover`
+    copel_label: "PORTO CAPANEMA"
+    role: "Aguas arriba de las Cataratas (~70 km)"
+
+  - key: hotel_cataratas
+    name: Hotel Cataratas
+    river: Rio Iguaçu
+    ana_code: 65992502               # por_validar (fuente secundaria)
+    copel_label: "HOTEL CATARATAS"
+    role: "Cataratas del Iguazú"
+
+  - key: uniao_da_vitoria
+    name: União da Vitória
+    river: Rio Iguaçu
+    ana_code: 65310000               # por_validar
+    copel_label: null
+    role: "Referencia de alto Iguazú"
+
+# ---------------------------------------------------------------------------
+# Fuentes
+# ---------------------------------------------------------------------------
+sources:
+  copel_mhb:
+    enabled: true
+    url: "https://www.copel.com/mhbweb/paginas/bacia-iguacu.jsf"
+    timeout: 60
+
+  ana:
+    enabled: true
+    # `legacy` no requiere credenciales. `hidrowebservice` sí: pedirlas a
+    # hidro@ana.gov.br / telemetria@ana.gov.br y exportarlas como
+    # ANA_HWS_USER / ANA_HWS_PASS.
+    mode: legacy
+    legacy_base: "https://telemetriaws1.ana.gov.br/ServiceANA.asmx"
+    hws_base: "https://www.ana.gov.br/hidrowebservice"
+    timeout: 90
+
+  inpe_merge:
+    enabled: true
+    base: "https://ftp.cptec.inpe.br/modelos/tempo/MERGE/GPM/DAILY"
+    pattern: "{base}/{yyyy}/{mm}/MERGE_CPTEC_{yyyymmdd}.grib2"
+    timeout: 180
+
+  ons:
+    enabled: true
+    ckan: "https://dados.ons.org.br/api/3/action/package_show"
+    dataset: "dados-hidrologicos-res"
+    timeout: 180
+
+store:
+  path: "data/iguacu.parquet"

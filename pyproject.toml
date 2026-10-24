@@ -1,0 +1,27 @@
+[project]
+name = "iguacu-monitor"
+version = "0.1.0"
+description = "Monitor de regulación y precipitación de la cuenca del río Iguazú"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "requests>=2.31",
+    "pyyaml>=6.0",
+    "lxml>=4.9",
+    "beautifulsoup4>=4.12",
+    "pyarrow>=14.0",
+]
+
+[project.optional-dependencies]
+# Lectura de GRIB2 para la precipitación MERGE. Pesadas: se instalan aparte.
+grib = ["xarray>=2023.1", "cfgrib>=0.9.10", "eccodes>=1.6"]
+
+[project.scripts]
+iguacu-monitor = "iguacu_monitor.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["iguacu_monitor*"]
