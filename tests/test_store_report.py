@@ -98,7 +98,8 @@ def test_report_accumulates_precipitation_by_window():
 def test_report_flags_spilling_plants():
     rep = report.build(_frame(_populated()), _cfg(), now=NOW)
     assert next(s for s in rep.plants if s.key == "salto_caxias").spilling
-    assert any("vertiendo" in n for n in rep.notes)
+    assert {s.key for s in rep.spilling} == {"foz_do_areia", "salto_caxias"}
+    assert "vertiendo: Foz do Areia, Salto Caxias" in report.render_text(rep)
 
 
 def test_report_flags_stale_data():

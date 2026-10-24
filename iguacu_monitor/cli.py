@@ -6,8 +6,9 @@ import argparse
 import logging
 import sys
 from datetime import date, timedelta
+from pathlib import Path
 
-from iguacu_monitor import config, report, store
+from iguacu_monitor import config, demo, panel, report, store
 from iguacu_monitor.sources.ana import ANA
 from iguacu_monitor.sources.copel_mhb import CopelMHB
 from iguacu_monitor.sources.inpe_merge import InpeMerge
@@ -87,6 +88,22 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_html(args) -> int:
+    import pandas as pd
+
+    cfg = config.load(args.config)
+    if args.demo:
+        frame = pd.DataFrame([o.as_row() for o in demo.example_observations()])
+        rep, note = report.build(frame, cfg, now=demo.SNAPSHOT), demo.NOTE
+    else:
+        rep, note = report.build(store.load(cfg.store_path), cfg), None
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(panel.render(rep, cfg, note=note, fragment=args.fragment), encoding="utf-8")
+    print(f"panel escrito en {out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="iguacu-monitor",
@@ -112,6 +129,14 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("report", help="estado actual de la cuenca")
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("html", help="escribir el panel HTML de la cascada")
+    p.add_argument("--out", default="panel/iguacu.html", help="archivo de salida")
+    p.add_argument("--demo", action="store_true",
+                   help="usar datos de ejemplo en vez del almacenamiento local")
+    p.add_argument("--fragment", action="store_true",
+                   help="sin <html>/<head>/<body>, para incrustar o publicar")
+    p.set_defaults(func=cmd_html)
 
     args = parser.parse_args(argv)
     logging.basicConfig(

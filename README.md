@@ -27,7 +27,16 @@ iguacu-monitor probe                 # ¿qué devuelve cada fuente ahora?
 iguacu-monitor discover "Capanema"   # buscar el código ANA de una estación
 iguacu-monitor fetch --days 7        # descargar y acumular
 iguacu-monitor report                # estado de la cuenca
+iguacu-monitor html                  # panel HTML de la cascada
+iguacu-monitor html --demo           # el panel con datos de ejemplo, sin red
 ```
+
+El panel sigue la lógica del tablero operativo: una tarjeta por usina de
+aguas arriba hacia aguas abajo, con estado según el caudal **afluente**
+(IO-OR.PR.IGU Rev.44: Santiago y Osório atención ≥ 4.000 / alerta ≥ 7.000;
+Caxias y Baixo atención ≥ 3.000 / alerta ≥ 5.000 m³/s; Foz do Areia y Segredo
+operan por nivel), volumen útil, tendencia por hora y sparkline de 48 h. Los
+datos de `--demo` son los del tablero del 23-oct 22:00 con series sintéticas.
 
 Para dejarlo corriendo solo, basta un cron horario con `fetch`:
 
@@ -51,14 +60,14 @@ no pudo ejercitarse**. Por eso existe `probe`: ejecutarlo es el primer paso.
 
 ### Qué falta resolver en la primera corrida
 
-1. **`ana_code` de Porto Capanema** está en `null`. Resolvelo con:
-   ```bash
-   iguacu-monitor discover "Capanema"
-   ```
-   y copiá el código a `config/iguacu.yml`.
+1. **Códigos ANA del tronco**: Capanema `65987000` y Cataratas `65992500`,
+   tomados del tablero operativo. Una fuente secundaria citaba `65992502`
+   para Cataratas, posiblemente el sensor telemétrico de la misma sección:
+   si el servicio no devuelve datos con `65992500`, probá con
+   `discover "Cataratas"`.
 
-2. **`ana_code` de Hotel Cataratas** (`65992502`) proviene de una fuente
-   secundaria, no del inventario oficial. Confirmalo con `discover "Cataratas"`.
+2. **La banda de tendencia estable** (`trend_flat_band: 15` m³/s/h) se
+   infirió del tablero (+11/h estable, +16/h sube). Ajustala si tu regla es otra.
 
 3. **Etiquetas `copel_label` y `ons_label`** son conjeturas razonables sobre
    cómo cada portal nombra las usinas. `probe` reporta cuáles no casaron y

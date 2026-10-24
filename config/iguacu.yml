@@ -15,74 +15,129 @@ basin:
 
 # ---------------------------------------------------------------------------
 # Regulación: cascada del Iguazú, de aguas arriba hacia aguas abajo
+#
+# El estado de cada usina se decide por el caudal que ENTRA (afluente),
+# según la IO-OR.PR.IGU Rev.44. Foz do Areia y Segredo no tienen umbral de
+# caudal: operan por nivel. Umbrales y tiempos de viaje: tomados del tablero
+# operativo (FEWS-Yacyretá). Los tiempos de viaje pueden variar con el caudal.
 # ---------------------------------------------------------------------------
 plants:
   - key: foz_do_areia
     name: Foz do Areia (Gov. Bento Munhoz da Rocha Neto)
+    short: Foz do Areia
     operator: COPEL
     copel_label: "FOZ DO AREIA"      # etiqueta en la página MHB (por_validar)
     ons_label: "GOV. BENTO MUNHOZ"   # etiqueta en el dataset ONS (por_validar)
     order: 1
+    operation: nivel
+    travel_h: null                   # cabecera de la cascada
 
   - key: segredo
     name: Segredo (Gov. Ney Aminthas de Barros Braga)
+    short: Segredo
     operator: COPEL
     copel_label: "SEGREDO"
     ons_label: "GOV. NEY A. B. BRAGA"
     order: 2
+    operation: nivel
+    travel_h: 1
 
   - key: salto_santiago
     name: Salto Santiago
+    short: Santiago
     operator: ENGIE
     copel_label: null                # no es de COPEL: sólo vía ONS
     ons_label: "SALTO SANTIAGO"
     order: 3
+    operation: caudal
+    attention: 4000                  # m3/s afluente
+    alert: 7000
+    travel_h: null
 
   - key: salto_osorio
     name: Salto Osório
+    short: Osório
     operator: ENGIE
     copel_label: null
     ons_label: "SALTO OSORIO"
     order: 4
+    operation: caudal
+    attention: 4000
+    alert: 7000
+    travel_h: 1
 
   - key: salto_caxias
     name: Salto Caxias (Gov. José Richa)
+    short: Caxias
     operator: COPEL
     copel_label: "SALTO CAXIAS"
     ons_label: "GOV. JOSE RICHA"
     order: 5
+    operation: caudal
+    attention: 3000
+    alert: 5000
+    travel_h: 2
 
   - key: baixo_iguacu
     name: Baixo Iguaçu
+    short: Baixo
     operator: NEOENERGIA
     copel_label: null
     ons_label: "BAIXO IGUACU"
     order: 6
+    operation: caudal
+    attention: 3000
+    alert: 5000
+    travel_h: 1
 
 # ---------------------------------------------------------------------------
-# Caudal observado
+# Caudal observado en el tronco
 # ---------------------------------------------------------------------------
 stations:
   - key: porto_capanema
     name: Porto Capanema
+    short: Capanema
     river: Rio Iguaçu
-    ana_code: null                   # desconocido -> resolver con `discover`
+    ana_code: 65987000               # tablero operativo
     copel_label: "PORTO CAPANEMA"
     role: "Aguas arriba de las Cataratas (~70 km)"
+    travel_h: 4
 
   - key: hotel_cataratas
     name: Hotel Cataratas
+    short: Cataratas
     river: Rio Iguaçu
-    ana_code: 65992502               # por_validar (fuente secundaria)
+    # Tablero operativo. Una fuente secundaria citaba 65992502, que podría
+    # ser el sensor telemétrico de la misma sección: confirmar con `discover`.
+    ana_code: 65992500
     copel_label: "HOTEL CATARATAS"
     role: "Cataratas del Iguazú"
+    travel_h: 11
 
   - key: uniao_da_vitoria
     name: União da Vitória
+    short: União da Vitória
     river: Rio Iguaçu
     ana_code: 65310000               # por_validar
     copel_label: null
     role: "Referencia de alto Iguazú"
+    travel_h: null
+
+# ---------------------------------------------------------------------------
+# Lectura y panel
+# ---------------------------------------------------------------------------
+report:
+  threshold_source: "IO-OR.PR.IGU Rev.44"
+  # Tendencia: pendiente por mínimos cuadrados sobre las últimas horas.
+  trend_window_h: 3
+  # Por debajo de esta pendiente (m3/s por hora) la tendencia se muestra
+  # estable (▶). Inferido del tablero operativo: +11/h estable, +16/h sube.
+  trend_flat_band: 15
+  sparkline_h: 48
+  # Hora mostrada en el panel. Brasil sur y Argentina: UTC-3, sin horario de verano.
+  display_utc_offset_h: -3
+  # Estaciones que van en la fila de la cascada, en orden.
+  panel_stations: [porto_capanema, hotel_cataratas]
 
 # ---------------------------------------------------------------------------
 # Fuentes
