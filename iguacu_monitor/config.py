@@ -32,6 +32,8 @@ class Site:
     lat: float | None = None
     lon: float | None = None
     drainage_km2: float | None = None  # área de drenaje oficial (ANA)
+    # Niveles de referencia de la régua [(etiqueta, m)], p. ej. crecidas previas.
+    level_refs: list[tuple[str, float]] = field(default_factory=list)
 
     @property
     def label(self) -> str:
@@ -161,6 +163,7 @@ def load(path: str | Path = DEFAULT_CONFIG) -> Config:
             travel_h=_opt_float(s.get("travel_h")),
             lat=_opt_float(s.get("lat")), lon=_opt_float(s.get("lon")),
             drainage_km2=_opt_float(s.get("drainage_km2")),
+            level_refs=[(str(r["label"]), float(r["level"])) for r in s.get("level_refs") or []],
         ))
 
     store_path = Path((raw.get("store") or {}).get("path", "data/iguacu.parquet"))

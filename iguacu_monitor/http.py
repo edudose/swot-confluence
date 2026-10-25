@@ -24,10 +24,12 @@ class FetchError(RuntimeError):
     """La fuente no pudo ser leída tras agotar los reintentos."""
 
 
-def get(
+def request(
+    method: str,
     url: str,
     *,
     params: dict[str, Any] | None = None,
+    data: dict[str, Any] | None = None,
     timeout: float = 60,
     attempts: int = 4,
     backoff: float = 2.0,
@@ -43,7 +45,8 @@ def get(
     last: Exception | None = None
     for attempt in range(1, attempts + 1):
         try:
-            resp = sess.get(url, params=params, timeout=timeout, stream=stream, headers=hdrs)
+            resp = sess.request(method, url, params=params, data=data, timeout=timeout,
+                                stream=stream, headers=hdrs)
             if resp.status_code in RETRY_STATUS and attempt < attempts:
                 wait = backoff ** attempt
                 log.warning("%s devolvió %s; reintento %d/%d en %.0fs",
@@ -61,3 +64,11 @@ def get(
             time.sleep(wait)
 
     raise FetchError(f"no pude leer {url} tras {attempts} intentos: {last}")
+
+
+def get(url: str, **kwargs: Any) -> requests.Response:
+    return request("GET", url, **kwargs)
+
+
+def post(url: str, **kwargs: Any) -> requests.Response:
+    return request("POST", url, **kwargs)

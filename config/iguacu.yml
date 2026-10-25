@@ -29,7 +29,7 @@ plants:
     name: Foz do Areia (Gov. Bento Munhoz da Rocha Neto)
     short: Foz do Areia
     operator: COPEL
-    copel_label: "FOZ DO AREIA"      # etiqueta en la página MHB (por_validar)
+    copel_label: "Foz do Areia"       # título del punto en el MHB
     ons_label: "G. B. MUNHOZ"
     ons_id: IGGBMU                  # id_reservatorio en ONS (verificado)
     order: 1
@@ -43,7 +43,7 @@ plants:
     name: Segredo (Gov. Ney Aminthas de Barros Braga)
     short: Segredo
     operator: COPEL
-    copel_label: "SEGREDO"
+    copel_label: "Segredo"       # título del punto en el MHB
     ons_label: "SEGREDO"
     ons_id: IGSEGR                  # id_reservatorio en ONS (verificado)
     order: 2
@@ -57,7 +57,7 @@ plants:
     name: Salto Santiago
     short: Santiago
     operator: ENGIE
-    copel_label: null                # no es de COPEL: sólo vía ONS
+    copel_label: "Salto Santiago"       # título del punto en el MHB
     ons_label: "SALTO SANTIAGO"
     ons_id: IGSSAN                  # id_reservatorio en ONS (verificado)
     order: 3
@@ -73,7 +73,7 @@ plants:
     name: Salto Osório
     short: Osório
     operator: ENGIE
-    copel_label: null
+    copel_label: "Salto Osorio"       # título del punto en el MHB
     ons_label: "SALTO OSORIO"
     ons_id: IGSOSO                  # id_reservatorio en ONS (verificado)
     order: 4
@@ -89,7 +89,7 @@ plants:
     name: Salto Caxias (Gov. José Richa)
     short: Caxias
     operator: COPEL
-    copel_label: "SALTO CAXIAS"
+    copel_label: "Salto Caxias"       # título del punto en el MHB
     ons_label: "SALTO CAXIAS"
     ons_id: IGSCAX                  # id_reservatorio en ONS (verificado)
     order: 5
@@ -105,7 +105,7 @@ plants:
     name: Baixo Iguaçu
     short: Baixo
     operator: NEOENERGIA
-    copel_label: null
+    copel_label: "Baixo Iguaçu"       # título del punto en el MHB
     ons_label: "BAIXO IGUACU"
     ons_id: IGUHBI                  # id_reservatorio en ONS (verificado)
     order: 6
@@ -126,7 +126,7 @@ stations:
     short: Capanema
     river: Rio Iguaçu
     ana_code: 65987000               # tablero operativo
-    copel_label: "PORTO CAPANEMA"
+    copel_label: "Porto Capanema"       # título del punto en el MHB
     role: "Aguas arriba de las Cataratas (~70 km)"
     travel_h: 4
 
@@ -140,7 +140,7 @@ stations:
     # Tablero operativo. Una fuente secundaria citaba 65992502, que podría
     # ser el sensor telemétrico de la misma sección: confirmar con `discover`.
     ana_code: 65992500
-    copel_label: "HOTEL CATARATAS"
+    copel_label: "Hotel Cataratas"       # título del punto en el MHB
     role: "Cataratas del Iguazú"
     travel_h: 11
 
@@ -152,9 +152,38 @@ stations:
     short: União da Vitória
     river: Rio Iguaçu
     ana_code: 65310001               # verificado: 65310000 no devuelve datos
-    copel_label: null
+    copel_label: "União da Vitória"       # título del punto en el MHB
     role: "Referencia de alto Iguazú"
     travel_h: null
+    # Crecida de septiembre de 2026: 6,258 m y ~2.130 m³/s el 15/09 a las 9 h,
+    # al empezar a bajar (monitoreo de COPEL citado por la prensa local); el
+    # municipio declaró situación de emergencia.
+    level_refs:
+      - {label: "crecida de sep 2026", level: 6.258}
+
+  # Puestos de la cabecera (sólo COPEL). El alto Iguazú responde lento: la
+  # onda tarda días en llegar a União da Vitória y sostiene lo que entra a
+  # Foz do Areia mucho después de que bajaron los afluentes rápidos.
+  - key: sao_mateus_do_sul
+    name: São Mateus do Sul
+    short: São Mateus
+    river: Rio Iguaçu
+    copel_label: "São Mateus do Sul"
+    role: "Alto Iguazú, aguas arriba de União da Vitória"
+
+  - key: fluviopolis
+    name: Fluviópolis
+    short: Fluviópolis
+    river: Rio Iguaçu
+    copel_label: "Fluviópolis"
+    role: "Alto Iguazú, aguas arriba de União da Vitória"
+
+  - key: rio_negro
+    name: Rio Negro
+    short: Rio Negro
+    river: Rio Negro
+    copel_label: "Rio Negro"
+    role: "Afluente del alto Iguazú"
 
 # ---------------------------------------------------------------------------
 # Subcuencas: áreas incrementales por punto de control
@@ -212,6 +241,21 @@ report:
   display_utc_offset_h: -3
   # Estaciones que van en la fila de la cascada, en orden.
   panel_stations: [porto_capanema, hotel_cataratas]
+  # Puestos del alto Iguazú, en la sección de cabecera del panel.
+  headwater_stations: [sao_mateus_do_sul, fluviopolis, rio_negro, uniao_da_vitoria]
+  # Una fuente por sitio y variable: la primera de la lista, salvo que haya
+  # quedado más de source_lag_tolerance_h atrás de la más fresca. COPEL va
+  # primero en las usinas porque llega ~2 h antes que ONS (los valores
+  # coinciden salvo redondeo). En el tronco manda ANA, con la que se
+  # estimaron los tiempos de viaje; en Cataratas COPEL lee ~5 % más de
+  # caudal y ~8 cm más de nivel que ANA (25-oct-2026), así que sólo se pasa a
+  # COPEL si ANA quedó más de 3 h atrás, para no saltar entre dos curvas.
+  source_priority:
+    plant: [copel_mhb, ons]
+    station: [ana, copel_mhb]
+  source_lag_tolerance_h:
+    plant: 1.5
+    station: 3
   # Lluvia medida por los pluviómetros (ANA en todas las ventanas, CEMADEN sólo en 24 h).
   gauge_windows_h: [1, 3, 6, 12, 24, 36, 48, 72]
   gauge_min_coverage: 0.8        # fracción de lecturas esperadas en la ventana
@@ -241,11 +285,12 @@ report:
 # ---------------------------------------------------------------------------
 sources:
   copel_mhb:
-    # La página carga cada punto en un diálogo JSF dinámico que exige un rango
-    # de fechas; hasta implementarlo, la regulación sale de ONS (horario).
-    enabled: false
-    url: "https://www.copel.com/mhbweb/paginas/bacia-iguacu.jsf"
+    # Monitoreo hidrológico de COPEL: 72 h horarias de usinas y puestos, con
+    # ~1 h de rezago (ONS llega ~2 h después), y la previsión de SIMEPAR para
+    # União da Vitória. Se recorre la página PrimeFaces como un navegador.
+    enabled: true
     timeout: 60
+    forecast_site: uniao_da_vitoria
 
   cemaden:
     enabled: true

@@ -16,10 +16,20 @@ LEVEL = "level"    # nivel / cota            [m]
 STORAGE = "storage"  # volumen útil          [%]
 PRECIP = "precip"  # precipitación           [mm]
 PRECIP_24H = "precip_24h"  # acumulado móvil de 24 h publicado como tal [mm]
+# Pronóstico (SIMEPAR, publicado por COPEL para União da Vitória). El sello
+# de tiempo es el instante pronosticado; FC_BASE marca el último dato
+# observado que tomó el modelo, y su valor es ese nivel.
+FC_BASE = "fc_base"
+FC_LEVEL = "fc_level"            # con la lluvia prevista por SIMEPAR [m]
+FC_QOBS = "fc_qobs"              # [m3/s]
+FC_LEVEL_DRY = "fc_level_dry"    # sin lluvia en las próximas 24 h [m]
+FC_QOBS_DRY = "fc_qobs_dry"      # [m3/s]
+FORECAST_VARS = (FC_LEVEL, FC_QOBS, FC_LEVEL_DRY, FC_QOBS_DRY)
 
 UNITS = {
     QAFL: "m3/s", QDEF: "m3/s", QTUR: "m3/s", QVER: "m3/s", QOBS: "m3/s",
     LEVEL: "m", STORAGE: "%", PRECIP: "mm", PRECIP_24H: "mm",
+    FC_BASE: "m", FC_LEVEL: "m", FC_QOBS: "m3/s", FC_LEVEL_DRY: "m", FC_QOBS_DRY: "m3/s",
 }
 
 VARIABLE_ALIASES: dict[str, str] = {

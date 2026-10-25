@@ -15,7 +15,8 @@ from html import escape
 
 from iguacu_monitor.config import Config
 from iguacu_monitor.model import LEVEL, QAFL, QTUR, QVER, STORAGE
-from iguacu_monitor.report import ALERTA, ATENCION, NIVEL, NORMAL, RAIN_STALE_H, Report, SiteState
+from iguacu_monitor.report import (ALERTA, ATENCION, FORECAST_STALE_H, NIVEL, NORMAL, RAIN_STALE_H, Forecast,
+                                   Report, SiteState)
 
 DIAS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
 MESES = ["ene", "feb", "mar", "abr", "may", "jun",
@@ -139,13 +140,36 @@ def _rows(pairs: list[tuple[str, str]]) -> str:
         f"<div><dt>{escape(k)}</dt><dd>{v}</dd></div>" for k, v in pairs) + "</dl>"
 
 
+SOURCE_NAME = {"copel_mhb": "COPEL", "ons": "ONS", "ana": "ANA"}
+
+
+def _source_html(state: SiteState, tz: timezone | None) -> str:
+    """De dónde salió la cifra grande y de qué hora es: con varias fuentes
+    por sitio, el operador tiene que poder verlo."""
+    src = state.sources.get(state.headline_var)
+    when = state.series[-1][0] if state.series else state.last_seen
+    if not src or when is None or tz is None:
+        return ""
+    local = when.astimezone(tz)
+    return f'<p class="src-tag">{SOURCE_NAME.get(src, src)} · {DIAS[local.weekday()]} {local:%H} h</p>'
+
+
+def fmt_cm_h(m_per_h: float | None) -> str:
+    if m_per_h is None:
+        return ""
+    cm = m_per_h * 100
+    if abs(cm) < 0.5:
+        return "±0 cm/h"
+    return f"{'+' if cm > 0 else '−'}{abs(cm):.0f} cm/h"
+
+
 def _age_html(state: SiteState) -> str:
     if state.stale and state.age_hours is not None:
         return f'<p class="age">dato de hace {fmt_int(state.age_hours)} h</p>'
     return ""
 
 
-def plant_card(state: SiteState, band: float) -> str:
+def plant_card(state: SiteState, band: float, tz: timezone | None = None) -> str:
     site = state.site
     status = state.status or "sin_dato"
     chip_class, chip_text = CHIP.get(status, ("chip-sindato", "Sin dato"))
@@ -182,6 +206,7 @@ def plant_card(state: SiteState, band: float) -> str:
     </div>
   </div>
   {rows}
+  {_source_html(state, tz)}
   {_age_html(state)}
   {sparkline(state)}
 </article>'''
@@ -213,9 +238,83 @@ def station_card(state: SiteState, band: float, tz: timezone, series_class: str)
     </div>
   </div>
   {rows}
+  {_source_html(state, tz)}
   {_age_html(state)}
   {sparkline(state)}
 </article>'''
+
+
+# ------------------------------------------------------ cabecera
+def forecast_block(fc: Forecast, state: SiteState, tz: timezone, now: datetime) -> str:
+    """Pronóstico de SIMEPAR publicado por COPEL, con su pico y las crecidas
+    de referencia de la estación."""
+    dry = fc.dry_differs
+    head = "<tr><th>cuándo</th><th>régua</th><th>m³/s</th>" + ("<th>sin lluvia</th>" if dry else "") + "</tr>"
+    rows = []
+    for pt in fc.points:
+        extra = f"<td>{fmt_dec(pt.level_dry, 2)}</td>" if dry else ""
+        rows.append(f"<tr><td>{_when(pt.at, tz)}</td><td>{fmt_dec(pt.level, 2)}</td><td>{fmt_int(pt.q)}</td>{extra}</tr>")
+    peak = fc.peak
+    lines = []
+    if peak:
+        more = " y sigue subiendo al final del pronóstico" if fc.rising_at_end else ""
+        lines.append(f'<p class="fc-peak">Máximo del pronóstico: <b>{fmt_dec(peak.level, 2)} m</b> · '
+                     f'{fmt_int(peak.q)} m³/s · {_when(peak.at, tz)}{more}.</p>')
+        for label, ref in (state.site.level_refs if state.site else []):
+            gap = round((peak.level - ref) * 100)
+            verb = (f"supera por {gap} cm" if gap > 0 else
+                    "iguala" if gap == 0 else f"queda {-gap} cm por debajo de")
+            lines.append(f'<p class="fc-ref">{verb.capitalize()} la {escape(label)} ({fmt_dec(ref, 2)} m).</p>')
+    age = (now - fc.base_at).total_seconds() / 3600
+    stale = f' <span class="w">Tomó datos hasta hace {fmt_int(age)} h.</span>' if age > FORECAST_STALE_H else ""
+    return f'''<div class="fc-box">
+    <p class="fc-title">Pronóstico SIMEPAR, con la lluvia prevista</p>
+    <table class="fc">{head}{"".join(rows)}</table>
+    {"".join(lines)}
+    <p class="fc-note">Publicado por COPEL. Tomó datos hasta {_when(fc.base_at, tz)} ({fmt_dec(fc.base_level, 2)} m).{stale} Indicativo: COPEL advierte que no se use solo para decidir.</p>
+  </div>'''
+
+
+def head_card(state: SiteState, band: float, tz: timezone, fc: Forecast | None = None,
+              now: datetime | None = None) -> str:
+    site = state.site
+    level = state.values.get(LEVEL)
+    chip = f"Tronco {site.ana_code}" if site.ana_code else site.river or "COPEL"
+    rows = _rows([
+        ("régua", (f"{fmt_dec(level, 2)} m" if level is not None else "—")
+         + (f" <span class=\"dim\">{fmt_cm_h(state.level_trend_per_h)}</span>" if state.level_trend_per_h is not None else "")),
+    ])
+    wide = " uv" if fc else ""
+    return f'''<article class="card is-station{wide}">
+  <header class="card-h"><h2>{escape(site.label)}</h2></header>
+  <p class="chip chip-code">{escape(chip)}</p>
+  <div class="hero">
+    <svg class="ring" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="13"/><circle class="core" cx="17" cy="17" r="5"/></svg>
+    <div class="big">
+      <div class="num">{fmt_int(state.headline)}</div>
+      <div class="unit">m³/s</div>
+      {_trend_html(state, band)}
+    </div>
+  </div>
+  {rows}
+  {_source_html(state, tz)}
+  {_age_html(state)}
+  {sparkline(state)}
+  {forecast_block(fc, state, tz, now or datetime.now(timezone.utc)) if fc else ""}
+</article>'''
+
+
+def headwater_section(report: Report, cfg: Config, band: float, tz: timezone) -> str:
+    keys = cfg.report.get("headwater_stations") or []
+    by_key = {s.key: s for s in report.stations}
+    cards = [head_card(by_key[k], band, tz, report.forecasts.get(k), report.generated)
+             for k in keys if k in by_key and by_key[k].values]
+    if not cards:
+        return ""
+    return f'''<section class="head" aria-label="Cabecera del Iguazú">
+  <div><h2>Alto Iguazú · cabecera</h2><p class="lede">Puestos aguas arriba de Foz do Areia. El alto Iguazú responde lento: la crecida tarda días en llegar a União da Vitória y sostiene lo que entra a Foz do Areia después de que bajaron los afluentes rápidos.</p></div>
+  <div class="head-grid">{"".join(cards)}</div>
+</section>'''
 
 
 # ------------------------------------------------------ onda hacia Cataratas
@@ -585,6 +684,35 @@ table.sbt { width: 100%; border-collapse: collapse; font-variant-numeric: tabula
 .wave h2 { margin: 0; font-family: var(--font-num); font-weight: 700; font-size: 1.05rem;
   letter-spacing: 0.09em; text-transform: uppercase; }
 .wave .lede { margin: 2px 0 0; color: var(--muted); font-size: 0.88rem; line-height: 1.4; }
+.src-tag { margin: 0; color: var(--faint); font-size: 0.74rem; letter-spacing: 0.02em; }
+
+/* Cabecera: puestos del alto Iguazú; União da Vitória lleva el pronóstico. */
+.head { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+  display: grid; gap: 10px; }
+.head h2 { margin: 0; font-family: var(--font-num); font-weight: 700; font-size: 1.05rem;
+  letter-spacing: 0.09em; text-transform: uppercase; }
+.head .lede { margin: 2px 0 0; color: var(--muted); font-size: 0.88rem; line-height: 1.4; }
+.head-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items: start; }
+.head .card { background: var(--panel-hi); }
+.head .card::after { display: none !important; }
+.head .card.uv { grid-column: 1 / -1; }
+.head .rows .dim { color: var(--muted); font-weight: 500; font-size: 0.86rem; }
+@media (min-width: 860px) {
+  .head-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 2fr); }
+  .head .card.uv { grid-column: auto; }
+}
+.fc-box { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
+.fc-title { margin: 0; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.fc { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.88rem; }
+.fc th { text-align: right; color: var(--muted); font-weight: 500; font-size: 0.78rem; padding: 3px 4px;
+  border-bottom: 1px solid var(--line); }
+.fc td { text-align: right; padding: 3px 4px; font-family: var(--font-num); font-weight: 600; }
+.fc th:first-child, .fc td:first-child { text-align: left; font-family: var(--font-ui); font-weight: 500; }
+.fc-peak, .fc-ref { margin: 0; font-size: 0.9rem; }
+.fc-peak b { color: var(--warn); }
+.fc-ref { color: var(--muted); }
+.fc-note { margin: 0; color: var(--muted); font-size: 0.76rem; line-height: 1.4; }
+.fc-note .w { color: var(--warn); }
 .steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .steps li { position: relative; min-width: 0; display: grid; gap: 2px; align-content: start;
@@ -649,6 +777,20 @@ def _summary(report: Report, tz: timezone | None = None) -> str:
         if big.q > w.target_q * 1.05:
             pills.append(f'<li class="pill warn"><span class="k">Onda a {escape(w.target.replace("Hotel ", ""))}</span>'
                          f'≈ {fmt_int(big.q)} m³/s · {_when_range(big.eta, big.eta_alt, tz)}</li>')
+    states = {s.key: s for s in report.sites}
+    for fc in report.forecasts.values():
+        peak, state = fc.peak, states.get(fc.site_key)
+        if not tz or not peak or state is None:
+            continue
+        now_level = state.values.get(LEVEL, fc.base_level)
+        text = f"{fmt_dec(now_level, 2)} m → {fmt_dec(peak.level, 2)} m {_when(peak.at, tz)}"
+        if fc.rising_at_end:
+            text += " y sigue subiendo"
+        over = [(label, ref) for label, ref in (state.site.level_refs if state.site else []) if peak.level > ref]
+        if over:
+            text += f" · supera la {escape(over[0][0])} ({fmt_dec(over[0][1], 2)} m)"
+        cls = "pill warn" if over else "pill"
+        pills.append(f'<li class="{cls}"><span class="k">{escape(fc.name)} · SIMEPAR</span>{text}</li>')
     alert = report.by_status(ALERTA)
     warn = report.by_status(ATENCION)
     if alert:
@@ -700,7 +842,7 @@ def render(report: Report, cfg: Config, *, note: str | None = None,
     clock = f"{local:%H:%M}"
     date_line = f"{DIAS[local.weekday()]} {local.day} {MESES[local.month - 1]} {local.year} · hora local"
 
-    cards = [plant_card(s, band) for s in report.plants]
+    cards = [plant_card(s, band, tz) for s in report.plants]
     wanted = opts.get("panel_stations") or [s.key for s in report.stations]
     station_by_key = {s.key: s for s in report.stations}
     for i, key in enumerate(wanted):
@@ -736,10 +878,11 @@ def render(report: Report, cfg: Config, *, note: str | None = None,
 {chr(10).join(cards)}
   </section>
   {wave_section(report, cfg, tz)}
+  {headwater_section(report, cfg, band, tz)}
   {rain_section(report, cfg, tz=tz)}
   <footer class="foot">
     {f"<ul>{notes}</ul>" if notes else ""}
-    <p>Fuentes: ONS (usinas, horario), ANA (caudal y pluviómetros), CEMADEN (pluviómetros, 24 h), INPE MERGE (lluvia diaria), HydroSHEDS (subcuencas; Lehner et al., 2008) · la lluvia medida de la cabecera es la mediana de los pluviómetros, no una media areal · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>
+    <p>Fuentes: COPEL (usinas y puestos, horario; pronóstico SIMEPAR de União da Vitória), ONS (usinas, horario), ANA (caudal y pluviómetros), CEMADEN (pluviómetros, 24 h), INPE MERGE (lluvia diaria), HydroSHEDS (subcuencas; Lehner et al., 2008) · la lluvia medida de la cabecera es la mediana de los pluviómetros, no una media areal · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>
   </footer>
 </main>'''
 

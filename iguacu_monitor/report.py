@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from iguacu_monitor.config import Config, Site
-from iguacu_monitor.model import PRECIP, QAFL, QDEF, QOBS, QVER
+from iguacu_monitor.model import LEVEL, PRECIP, QAFL, QDEF, QOBS, QTUR, QVER, STORAGE
 
 # Los pluviómetros de ANA reportan cada 15 min con ~1 h de demora: más de
 # 3 h sin lecturas es una actualización perdida.
@@ -47,6 +47,8 @@ class SiteState:
     site: Site | None = None
     trend_per_h: float | None = None              # de la variable principal
     series: list[tuple[datetime, float]] = field(default_factory=list)
+    sources: dict[str, str] = field(default_factory=dict)   # variable -> fuente elegida
+    level_trend_per_h: float | None = None        # régua, en las estaciones [m/h]
 
     @property
     def display_name(self) -> str:
@@ -533,6 +535,78 @@ def wave_to(target_key: str, states: list[SiteState], cfg: Config, max_points: i
 
 
 @dataclass
+class ForecastPoint:
+    at: datetime
+    level: float | None                 # régua, con la lluvia prevista [m]
+    q: float | None                     # [m3/s]
+    level_dry: float | None = None      # sin lluvia en las próximas 24 h
+    q_dry: float | None = None
+
+
+# Un pronóstico emitido hace más de esto ya no describe lo que viene.
+FORECAST_STALE_H = 12
+
+
+@dataclass
+class Forecast:
+    """Pronóstico publicado para una estación (SIMEPAR, vía COPEL)."""
+
+    site_key: str
+    name: str
+    base_at: datetime                   # último dato observado que tomó el modelo
+    base_level: float | None
+    points: list[ForecastPoint]
+
+    @property
+    def peak(self) -> ForecastPoint | None:
+        pts = [p for p in self.points if p.level is not None]
+        return max(pts, key=lambda p: (p.level, p.at)) if pts else None
+
+    @property
+    def rising_at_end(self) -> bool:
+        """El último punto todavía sube: el pico queda fuera del horizonte."""
+        pts = [p for p in self.points if p.level is not None]
+        return len(pts) >= 2 and pts[-1].level > pts[-2].level
+
+    @property
+    def dry_differs(self) -> bool:
+        return any(p.level_dry is not None and p.level is not None and abs(p.level - p.level_dry) >= 0.02
+                   for p in self.points)
+
+
+def forecasts_from(frame, cfg: Config) -> dict[str, Forecast]:
+    import pandas as pd
+
+    from iguacu_monitor.model import FC_BASE, FC_LEVEL, FC_LEVEL_DRY, FC_QOBS, FC_QOBS_DRY, FORECAST_VARS
+
+    out: dict[str, Forecast] = {}
+    for site in cfg.stations:
+        base = frame[(frame["site"] == site.key) & (frame["variable"] == FC_BASE)]
+        if base.empty:
+            continue
+        last = base.sort_values("timestamp").iloc[-1]
+        base_at = last["timestamp"]
+        # Puntos del último pronóstico: posteriores a su dato base y dentro
+        # de 72 h. Los de emisiones previas en los mismos instantes ya
+        # fueron reemplazados al guardar.
+        fc = frame[(frame["site"] == site.key) & frame["variable"].isin(FORECAST_VARS)
+                   & (frame["timestamp"] > base_at) & (frame["timestamp"] <= base_at + pd.Timedelta(hours=72))]
+        if fc.empty:
+            continue
+        table = fc.pivot_table(index="timestamp", columns="variable", values="value", aggfunc="last")
+
+        def get(row, var):
+            value = row.get(var)
+            return None if value is None or pd.isna(value) else float(value)
+        points = [ForecastPoint(at=t.to_pydatetime(), level=get(r, FC_LEVEL), q=get(r, FC_QOBS),
+                                level_dry=get(r, FC_LEVEL_DRY), q_dry=get(r, FC_QOBS_DRY))
+                  for t, r in table.sort_index().iterrows()]
+        out[site.key] = Forecast(site_key=site.key, name=site.label, base_at=base_at.to_pydatetime(),
+                                 base_level=float(last["value"]), points=points)
+    return out
+
+
+@dataclass
 class Report:
     generated: datetime
     basin: str
@@ -544,6 +618,7 @@ class Report:
     wave: Wave | None = None
     rain_until: datetime | None = None     # última lectura de los pluviómetros
     merge_until: datetime | None = None    # fin del último día MERGE publicado
+    forecasts: dict[str, Forecast] = field(default_factory=dict)
 
     @property
     def rain_age_hours(self) -> float | None:
@@ -574,6 +649,49 @@ class Report:
         return [s for s in self.plants if s.status == status]
 
 
+OBSERVED = (QAFL, QDEF, QTUR, QVER, QOBS, LEVEL, STORAGE)
+
+
+def select_sources(frame, cfg: Config):
+    """Deja una sola fuente por sitio y variable.
+
+    Promediar fuentes mezcla curvas de descarga y redondeos distintos (COPEL
+    publica de a 10 m³/s, ONS con unidades) y hace zigzaguear la tendencia.
+    Se usa la primera fuente de `source_priority` para el tipo de sitio,
+    salvo que su último dato haya quedado más de `source_lag_tolerance_h`
+    (un número o uno por tipo de sitio) atrás del más fresco: entonces la
+    siguiente. Sin preferencia configurada gana la más fresca.
+    """
+    import pandas as pd
+
+    opts = cfg.report
+    priority = opts.get("source_priority") or {}
+    raw_tol = opts.get("source_lag_tolerance_h", 1.5)
+
+    def tolerance(kind: str):
+        hours = raw_tol.get(kind, 1.5) if isinstance(raw_tol, dict) else raw_tol
+        return pd.Timedelta(hours=float(hours))
+    kinds = {s.key: s.kind for s in cfg.sites}
+    sub = frame[frame["site"].isin(list(kinds)) & frame["variable"].isin(OBSERVED)]
+    if sub.empty:
+        return frame
+    last = sub.groupby(["site", "variable", "source"])["timestamp"].max()
+    drop = []
+    for (site, var), group in last.groupby(level=[0, 1]):
+        by_source = group.droplevel([0, 1])
+        if len(by_source) < 2:
+            continue
+        freshest = by_source.max()
+        order = list(priority.get(kinds[site], []))
+        order += sorted((s for s in by_source.index if s not in order), key=lambda s: by_source[s], reverse=True)
+        chosen = next(s for s in order if s in by_source.index and by_source[s] >= freshest - tolerance(kinds[site]))
+        drop += [(site, var, s) for s in by_source.index if s != chosen]
+    if not drop:
+        return frame
+    key = pd.MultiIndex.from_frame(frame[["site", "variable", "source"]])
+    return frame[~key.isin(drop)]
+
+
 def build(frame, cfg: Config, now: datetime | None = None) -> Report:
     import pandas as pd
 
@@ -586,6 +704,7 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
 
     frame = frame.copy()
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+    frame = select_sources(frame, cfg)
 
     # --- último valor de cada (sitio, variable) -----------------------------
     latest = (frame.sort_values("timestamp")
@@ -602,6 +721,10 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
         if rows.empty:
             states.append(SiteState(key=site.key, name=site.name, kind=site.kind, site=site))
             continue
+        rows = rows[rows["variable"].isin(OBSERVED)]
+        if rows.empty:
+            states.append(SiteState(key=site.key, name=site.name, kind=site.kind, site=site))
+            continue
         values = {r["variable"]: float(r["value"]) for _, r in rows.iterrows()}
         last_seen = rows["timestamp"].max().to_pydatetime()
         state = SiteState(
@@ -609,6 +732,7 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
             last_seen=last_seen,
             age_hours=(now - last_seen).total_seconds() / 3600,
             site=site,
+            sources={r["variable"]: r["source"] for _, r in rows.iterrows()},
         )
 
         # Serie de la variable principal: alimenta la tendencia y la sparkline.
@@ -624,6 +748,13 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
                             for t, v in zip(spark["timestamp"], spark["value"])]
             recent = [p for p in state.series if p[0] >= end.to_pydatetime() - trend_window]
             state.trend_per_h = slope_per_hour(recent)
+        if site.kind == "station":
+            lev = frame[(frame["site"] == site.key) & (frame["variable"] == LEVEL)].sort_values("timestamp")
+            if not lev.empty:
+                end = lev["timestamp"].iloc[-1]
+                lev = lev[lev["timestamp"] >= end - trend_window]
+                state.level_trend_per_h = slope_per_hour(
+                    [(t.to_pydatetime(), float(v)) for t, v in zip(lev["timestamp"], lev["value"])])
         states.append(state)
 
     # --- precipitación acumulada sobre la cuenca ----------------------------
@@ -709,9 +840,15 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
     target = (cfg.report.get("panel_stations") or [None])[-1]
     wave = wave_to(target, states, cfg) if target else None
 
+    forecasts = forecasts_from(frame, cfg)
+    for fc in forecasts.values():
+        age = (now - fc.base_at).total_seconds() / 3600
+        if age > FORECAST_STALE_H:
+            notes.append(f"pronóstico de {fc.name}: tomó datos hasta hace {age:.0f} h")
+
     return Report(generated=now, basin=cfg.basin.name, sites=states,
                   precip=precip, notes=notes, gauges=gauges, subbasins=subs, wave=wave,
-                  rain_until=rain_until, merge_until=merge_until)
+                  rain_until=rain_until, merge_until=merge_until, forecasts=forecasts)
 
 
 def render_text(report: Report) -> str:
@@ -745,6 +882,19 @@ def render_text(report: Report) -> str:
         age = f"hace {state.age_hours:.0f} h" if state.age_hours is not None else "sin dato"
         lines.append(f"  {state.display_name[:name_w]:<{name_w}}"
                      f"{cell(state, QOBS)}   {age}")
+
+    for fc in report.forecasts.values():
+        local = timezone(timedelta(hours=-3))
+        base = f"{fc.base_level:.2f} m" if fc.base_level is not None else "—"
+        lines += ["", f"PRONÓSTICO {fc.name.upper()} (SIMEPAR vía COPEL; último dato {fc.base_at.astimezone(local):%d %H:%M} local, {base})",
+                  f"  {'instante (local)':<{name_w}}{'régua m':>{num_w}}{'caudal':>{num_w}}{'sin lluvia':>{num_w}}"]
+        for pt in fc.points:
+            lv = f"{pt.level:>{num_w}.2f}" if pt.level is not None else f"{'—':>{num_w}}"
+            q = f"{pt.q:>{num_w},.0f}" if pt.q is not None else f"{'—':>{num_w}}"
+            dry = f"{pt.level_dry:>{num_w}.2f}" if pt.level_dry is not None else f"{'—':>{num_w}}"
+            lines.append(f"  {pt.at.astimezone(local):%d %H:%M}{'':<{name_w - 8}}{lv}{q}{dry}")
+        if fc.rising_at_end:
+            lines.append("  sigue subiendo al final del horizonte: el pico queda más adelante")
 
     if report.gauges:
         lines += ["", "LLUVIA MEDIDA (mm, pluviómetros ANA y CEMADEN; no es media areal)",

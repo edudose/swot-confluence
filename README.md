@@ -119,7 +119,7 @@ Verificadas contra los servicios reales el 25-oct-2026, salvo COPEL.
 | `ana` | Caudal y nivel en Capanema, Cataratas y União da Vitória | **Verificada.** Servicio legacy sin credenciales; nivel en centímetros, convertido a metros. |
 | `inpe_merge` | Lámina diaria media areal | **Verificada.** Acumulado de 12 a 12 UTC; el día en curso aún no publicado se saltea. |
 | `cemaden` | Pluviómetros automáticos municipales (146 en la cuenca y su borde) | **Verificada.** JSONP abierto del mapa interactivo (`resources.cemaden.gov.br/dados/311_24.json`); sólo el acumulado móvil de 24 h, sin series. Entra en la ventana de 24 h junto con ANA y la sostiene sola si ANA se cae. |
-| `copel_mhb` | Regulación COPEL y estaciones propias | **Desactivada.** La página navega por PrimeFaces: hay que abrir la cuenca, elegir el punto y cargar su diálogo; así devuelve 72 h horarias de cada usina y puesto, más la previsión de SIMEPAR para União da Vitória. Pendiente de convertir en fuente. ONS cubre las mismas usinas. |
+| `copel_mhb` | Las seis usinas, los puestos del tronco y de la cabecera (São Mateus do Sul, Fluviópolis, Rio Negro, União da Vitória) y la previsión de SIMEPAR para União da Vitória | **Verificada.** Se recorre la página PrimeFaces como un navegador (abrir la cuenca, elegir el punto, cargar su diálogo): 72 h horarias por punto con ~1 h de rezago, unas 2 h antes que ONS. Formato brasileño; hora de Brasilia. |
 
 Los tiempos de viaje del tablero se confirmaron con correlación cruzada sobre
 los datos del 23 y 24-oct: Baixo Iguaçu → Capanema ≈ 4 h (r = 0,98) y
@@ -153,6 +153,20 @@ regresión que lo cubre.
 la etiqueta del sitio y las columnas por la de la variable. Si el portal
 reordena su tabla, sigue funcionando; si cambia un nombre, `probe` lo dice en
 vez de devolver vacío en silencio.
+
+**Una fuente por sitio y variable.** Cuando dos fuentes miden lo mismo, el
+panel usa una sola (`source_priority`): COPEL en las usinas, porque llega
+antes que ONS y coincide salvo redondeo; ANA en el tronco, con la que se
+estimaron los tiempos de viaje. Se pasa a la siguiente sólo si la preferida
+quedó atrás más de `source_lag_tolerance_h`. Promediar mezclaba curvas: en
+Hotel Cataratas COPEL lee ~5 % más de caudal y ~8 cm más de nivel que ANA.
+Cada tarjeta dice de qué fuente y de qué hora es su cifra.
+
+**El pronóstico de União da Vitória es de SIMEPAR, publicado por COPEL.**
+Se guarda con el instante pronosticado y el último dato que tomó el
+modelo; el panel muestra sólo el último pronóstico y lo compara con las
+crecidas de referencia de la estación (`level_refs`). COPEL lo declara
+indicativo.
 
 **Un pluviómetro seco entre vecinos con lluvia se descarta.** El 24-oct-2026
 doce estaciones de ANA marcaron 0 mm con vecinos de 70 a 140 mm: sensores

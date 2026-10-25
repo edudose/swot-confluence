@@ -51,10 +51,12 @@ def test_extracts_plants_and_stations():
 
 
 def test_sites_without_copel_label_are_not_expected():
-    # Salto Santiago y Salto Osório no son de COPEL: tienen copel_label nulo,
-    # así que su ausencia del HTML no debe reportarse como falta.
-    cfg = _cfg()
-    _, notes = tables.extract(_frames(), cfg.sites, source="copel_mhb", timestamp=NOW)
+    # Un sitio con copel_label nulo no se busca en el HTML, así que su
+    # ausencia no debe reportarse como falta.
+    from dataclasses import replace
+
+    sites = [replace(s, copel_label=None) if s.key == "salto_santiago" else s for s in _cfg().sites]
+    _, notes = tables.extract(_frames(), sites, source="copel_mhb", timestamp=NOW)
     assert not any("salto_santiago" in n for n in notes)
 
 
