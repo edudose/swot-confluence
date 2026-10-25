@@ -135,10 +135,15 @@ def read_tables(html: str) -> list["object"]:
     monitor tiene que leer bien, así que dejamos todas las celdas como texto
     y que `parse_number`, que conoce ambos formatos, decida.
     """
-    import pandas as pd
-    from bs4 import BeautifulSoup
+    import warnings
 
-    soup = BeautifulSoup(html, "lxml")
+    import pandas as pd
+    from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
+
+    # COPEL sirve XHTML con declaración <?xml?>; se lee igual como HTML.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", XMLParsedAsHTMLWarning)
+        soup = BeautifulSoup(html, "lxml")
     frames: list[pd.DataFrame] = []
 
     for table in soup.find_all("table"):

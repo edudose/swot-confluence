@@ -19,6 +19,7 @@ class Site:
     operator: str = ""
     copel_label: str | None = None
     ons_label: str | None = None
+    ons_id: str | None = None
     ana_code: int | None = None
     order: int = 0
     role: str = ""
@@ -103,6 +104,7 @@ def load(path: str | Path = DEFAULT_CONFIG) -> Config:
             key=p["key"], name=p["name"], kind="plant",
             operator=p.get("operator", ""),
             copel_label=p.get("copel_label"), ons_label=p.get("ons_label"),
+            ons_id=p.get("ons_id"),
             order=int(p.get("order", 0)),
             short=p.get("short", ""),
             operation=p.get("operation", "caudal"),

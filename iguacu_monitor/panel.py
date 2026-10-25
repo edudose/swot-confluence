@@ -266,7 +266,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--fo
 .rule .c { color: var(--crit); font-weight: 600; }
 
 .cascade { display: grid; gap: 12px; grid-template-columns: 1fr; }
-.card { position: relative; min-width: 0; display: grid; gap: 8px; align-content: start;
+.card { position: relative; min-width: 0; display: grid; gap: 8px; align-content: start; container-type: inline-size;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
 .card.is-atencion { background: var(--warn-bg); border-color: var(--warn-line); }
 .card.is-alerta { background: var(--crit-bg); border-color: var(--crit-line); }
@@ -297,8 +297,10 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--fo
 .is-station.cap .ring, .is-station.cap .spark { color: var(--cap); }
 .is-station.cat .ring, .is-station.cat .spark { color: var(--cat); }
 .big { min-width: 0; }
-.num { font-family: var(--font-num); font-weight: 700; font-size: clamp(1.9rem, 1.1vw + 1.25rem, 2.85rem);
-  line-height: 1; font-variant-numeric: tabular-nums; }
+/* Relativo al ancho de la tarjeta: "15.616" tiene que entrar junto al tanque
+   tanto en la fila de 8 como en las 2 columnas del celular. */
+.num { font-family: var(--font-num); font-weight: 700; font-size: clamp(1.7rem, 1vw + 1.1rem, 2.6rem);
+  font-size: clamp(1.6rem, 17cqi, 2.8rem); line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .unit { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
 .trend { font-family: var(--font-num); font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .trend.up { color: var(--warn); }

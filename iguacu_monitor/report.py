@@ -199,25 +199,40 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
         notes.append("sin precipitación de MERGE: ¿falta cfgrib o no se corrió `fetch`?")
 
     # --- coherencia de la cascada -------------------------------------------
+    # Cada estación del tronco se compara con el punto anterior de la cadena
+    # tal como estaba hace `travel_h` horas: en una crecida, lo que una usina
+    # larga ahora llega aguas abajo recién después del tiempo de viaje, así
+    # que comparar valores simultáneos da falsas alarmas en el ascenso.
+    # Aguas abajo hay aporte incremental, no pérdida: caer muy por debajo del
+    # aguas arriba desfasado sugiere un dato viejo o mal escalado.
     by_key = {s.key: s for s in states}
-    caxias = by_key.get("salto_caxias")
-    cataratas = by_key.get("hotel_cataratas")
-    if caxias and cataratas:
-        qdef = caxias.values.get(QDEF)
-        qobs = cataratas.values.get(QOBS)
-        if qdef and qobs:
-            # Entre Salto Caxias y las Cataratas hay aporte incremental, así
-            # que lo normal es que Cataratas supere a la defluencia. Lo
-            # contrario sugiere un dato viejo o una lectura mal escalada.
-            ratio = qobs / qdef
-            if ratio < 0.9:
-                notes.append(
-                    f"Cataratas ({qobs:,.0f} m³/s) por debajo de la defluencia de "
-                    f"Salto Caxias ({qdef:,.0f} m³/s): revisar vigencia de los datos")
-            elif ratio > 2.5:
-                notes.append(
-                    f"Cataratas ({qobs:,.0f}) más que duplica Salto Caxias "
-                    f"({qdef:,.0f}): aporte incremental alto o error de escala")
+    chain = [p.key for p in cfg.plants] + list(opts.get("panel_stations") or [])
+    for upstream_key, key in zip(chain, chain[1:]):
+        down, up = by_key.get(key), by_key.get(upstream_key)
+        if not down or not up or down.kind != "station" or not down.site:
+            continue
+        lag = down.site.travel_h
+        q_now = down.headline
+        if lag is None or q_now is None or not up.series or down.last_seen is None:
+            continue
+        target = down.last_seen - timedelta(hours=lag)
+        earlier = [v for t, v in up.series if t <= target]
+        if not earlier or up.series[0][0] > target:
+            continue  # la serie aguas arriba no llega tan atrás
+        q_up = earlier[-1]
+        if q_up <= 0:
+            continue
+        ratio = q_now / q_up
+        if ratio < 0.85:
+            notes.append(
+                f"{down.display_name} ({q_now:,.0f} m³/s) por debajo de "
+                f"{up.display_name} hace {lag:g} h ({q_up:,.0f} m³/s): "
+                f"revisar vigencia o escala de los datos")
+        elif ratio > 2.5:
+            notes.append(
+                f"{down.display_name} ({q_now:,.0f}) más que duplica a "
+                f"{up.display_name} hace {lag:g} h ({q_up:,.0f}): "
+                f"aporte incremental alto o error de escala")
 
     for state in states:
         if state.stale and state.last_seen is not None:

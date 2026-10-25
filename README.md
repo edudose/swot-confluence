@@ -46,32 +46,29 @@ Para dejarlo corriendo solo, basta un cron horario con `fetch`:
 
 ## Fuentes y estado de verificación
 
-Este código se escribió en un entorno **sin acceso de red a ninguna de las
-cuatro fuentes** (bloqueadas por política del proxy). La lógica está probada
-con 58 tests sobre muestras sintéticas, pero **el contacto real con cada API
-no pudo ejercitarse**. Por eso existe `probe`: ejecutarlo es el primer paso.
+Verificadas contra los servicios reales el 25-oct-2026, salvo COPEL.
 
 | Fuente | Qué aporta | Estado |
 |---|---|---|
-| `copel_mhb` | Regulación de usinas COPEL + estaciones Capanema y Cataratas | **Por validar.** URL confirmada; estructura del DOM no. |
-| `ana` | Caudal y nivel telemétricos | **Por validar.** Servicio legacy sin credenciales; esquema XML deducido. |
-| `inpe_merge` | Precipitación en grilla 0,1° | **Por validar.** Patrón de URL confirmado por dos fuentes. |
-| `ons` | Regulación de toda la cascada (respaldo) | **Por validar.** Descubrimiento vía CKAN, sin URL fija. |
+| `ons` | Regulación de las seis usinas: afluente, turbinado, vertido, defluente, nivel y volumen útil | **Verificada.** Base horaria con 1 a 2 h de rezago; usinas por `id_reservatorio`; hora de Brasilia. |
+| `ana` | Caudal y nivel en Capanema, Cataratas y União da Vitória | **Verificada.** Servicio legacy sin credenciales; nivel en centímetros, convertido a metros. |
+| `inpe_merge` | Lámina diaria media areal | **Verificada.** Acumulado de 12 a 12 UTC; el día en curso aún no publicado se saltea. |
+| `copel_mhb` | Regulación COPEL y estaciones propias | **Desactivada.** Cada punto se carga en un diálogo JSF dinámico que exige un rango de fechas; pendiente de implementar. ONS cubre las mismas usinas. |
 
-### Qué falta resolver en la primera corrida
+Los tiempos de viaje del tablero se confirmaron con correlación cruzada sobre
+los datos del 23 y 24-oct: Baixo Iguaçu → Capanema ≈ 4 h (r = 0,98) y
+Capanema → Cataratas ≈ 10 h (r = 0,99), contra 4 y 11 h del tablero.
 
-1. **Códigos ANA del tronco**: Capanema `65987000` y Cataratas `65992500`,
-   tomados del tablero operativo. Una fuente secundaria citaba `65992502`
-   para Cataratas, posiblemente el sensor telemétrico de la misma sección:
-   si el servicio no devuelve datos con `65992500`, probá con
-   `discover "Cataratas"`.
+### Qué queda por revisar
+
+1. **Códigos ANA**: Capanema `65987000`, Cataratas `65992500` y União da
+   Vitória `65310001` devuelven datos. `65310000` no.
 
 2. **La banda de tendencia estable** (`trend_flat_band: 15` m³/s/h) se
    infirió del tablero (+11/h estable, +16/h sube). Ajustala si tu regla es otra.
 
-3. **Etiquetas `copel_label` y `ons_label`** son conjeturas razonables sobre
-   cómo cada portal nombra las usinas. `probe` reporta cuáles no casaron y
-   vuelca los encabezados reales para corregirlas.
+3. **COPEL**: implementar el pedido del diálogo con rango de fechas si se
+   quiere una segunda fuente para las usinas COPEL.
 
 4. **La cuenca es una caja envolvente**, no el polígono real. Sobreestima la
    lluvia al incluir áreas vecinas. Para afinar, apuntá `basin.polygon` a un
@@ -94,9 +91,10 @@ vez de devolver vacío en silencio.
 **Todo se almacena en UTC.** ANA entrega hora de Brasilia (UTC−3) sin
 declararlo; la conversión está cubierta por tests.
 
-**El reporte marca incoherencias físicas.** Si el caudal en Cataratas cae por
-debajo de la defluencia de Salto Caxias, avisa: aguas abajo hay aporte
-incremental, así que lo contrario indica dato viejo o error de escala.
+**El reporte marca incoherencias físicas, con tiempo de viaje.** Cada
+estación se compara con el punto anterior de la cascada tal como estaba hace
+`travel_h` horas. Comparar valores simultáneos daba falsas alarmas durante el
+ascenso de una crecida, cuando la onda todavía no llegó aguas abajo.
 
 ## Estructura
 

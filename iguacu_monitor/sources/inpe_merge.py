@@ -31,6 +31,10 @@ class MissingGribSupport(RuntimeError):
     pass
 
 
+class NotPublished(http.FetchError):
+    """El archivo del día aún no existe en el servidor."""
+
+
 def _require_grib():
     try:
         import xarray as xr  # noqa: F401
@@ -57,6 +61,9 @@ class InpeMerge(Source):
 
     def _download(self, day: date, dest: Path) -> int:
         resp = http.get(self.url_for(day), timeout=self.opts.get("timeout", 180), stream=True)
+        if resp.status_code == 404:
+            # MERGE publica con rezago: el día en curso suele no existir aún.
+            raise NotPublished(f"MERGE {day:%Y-%m-%d} todavía no publicado")
         resp.raise_for_status()
         size = 0
         with dest.open("wb") as fh:

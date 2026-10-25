@@ -27,7 +27,8 @@ plants:
     short: Foz do Areia
     operator: COPEL
     copel_label: "FOZ DO AREIA"      # etiqueta en la página MHB (por_validar)
-    ons_label: "GOV. BENTO MUNHOZ"   # etiqueta en el dataset ONS (por_validar)
+    ons_label: "G. B. MUNHOZ"
+    ons_id: IGGBMU                  # id_reservatorio en ONS (verificado)
     order: 1
     operation: nivel
     travel_h: null                   # cabecera de la cascada
@@ -37,7 +38,8 @@ plants:
     short: Segredo
     operator: COPEL
     copel_label: "SEGREDO"
-    ons_label: "GOV. NEY A. B. BRAGA"
+    ons_label: "SEGREDO"
+    ons_id: IGSEGR                  # id_reservatorio en ONS (verificado)
     order: 2
     operation: nivel
     travel_h: 1
@@ -48,6 +50,7 @@ plants:
     operator: ENGIE
     copel_label: null                # no es de COPEL: sólo vía ONS
     ons_label: "SALTO SANTIAGO"
+    ons_id: IGSSAN                  # id_reservatorio en ONS (verificado)
     order: 3
     operation: caudal
     attention: 4000                  # m3/s afluente
@@ -60,6 +63,7 @@ plants:
     operator: ENGIE
     copel_label: null
     ons_label: "SALTO OSORIO"
+    ons_id: IGSOSO                  # id_reservatorio en ONS (verificado)
     order: 4
     operation: caudal
     attention: 4000
@@ -71,7 +75,8 @@ plants:
     short: Caxias
     operator: COPEL
     copel_label: "SALTO CAXIAS"
-    ons_label: "GOV. JOSE RICHA"
+    ons_label: "SALTO CAXIAS"
+    ons_id: IGSCAX                  # id_reservatorio en ONS (verificado)
     order: 5
     operation: caudal
     attention: 3000
@@ -84,6 +89,7 @@ plants:
     operator: NEOENERGIA
     copel_label: null
     ons_label: "BAIXO IGUACU"
+    ons_id: IGUHBI                  # id_reservatorio en ONS (verificado)
     order: 6
     operation: caudal
     attention: 3000
@@ -118,7 +124,7 @@ stations:
     name: União da Vitória
     short: União da Vitória
     river: Rio Iguaçu
-    ana_code: 65310000               # por_validar
+    ana_code: 65310001               # verificado: 65310000 no devuelve datos
     copel_label: null
     role: "Referencia de alto Iguazú"
     travel_h: null
@@ -144,7 +150,9 @@ report:
 # ---------------------------------------------------------------------------
 sources:
   copel_mhb:
-    enabled: true
+    # La página carga cada punto en un diálogo JSF dinámico que exige un rango
+    # de fechas; hasta implementarlo, la regulación sale de ONS (horario).
+    enabled: false
     url: "https://www.copel.com/mhbweb/paginas/bacia-iguacu.jsf"
     timeout: 60
 
@@ -167,6 +175,10 @@ sources:
   ons:
     enabled: true
     ckan: "https://dados.ons.org.br/api/3/action/package_show"
+    # Base horaria (no consistida, ~1-2 h de rezago, un archivo por mes) para
+    # el monitor; la diaria consolidada queda como respaldo.
+    mode: hourly
+    dataset_hourly: "dados_hidrologicos_ho"
     dataset: "dados-hidrologicos-res"
     timeout: 180
 

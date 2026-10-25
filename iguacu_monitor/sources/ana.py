@@ -86,13 +86,15 @@ class ANA(Source):
                 continue
             when = when.replace(tzinfo=BRASILIA).astimezone(timezone.utc)
 
-            for names, var in (
-                (("vazao",), QOBS),
-                (("nivel",), LEVEL),
-                (("chuva",), PRECIP),
+            # La telemetría de ANA entrega el nivel en centímetros.
+            for names, var, scale in (
+                (("vazao",), QOBS, 1.0),
+                (("nivel",), LEVEL, 0.01),
+                (("chuva",), PRECIP, 1.0),
             ):
                 value = _to_float(_text(node, *names))
                 if value is not None:
+                    value *= scale
                     out.append(Observation(
                         source=self.name, site=site_key, variable=var,
                         timestamp=when, value=value,

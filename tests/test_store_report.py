@@ -110,13 +110,33 @@ def test_report_flags_stale_data():
     assert any("30 h" in n for n in rep.notes)
 
 
-def test_report_flags_implausible_cascade():
-    # Cataratas por debajo de la defluencia de Salto Caxias es físicamente
-    # raro: aguas abajo hay aporte incremental, no pérdida.
-    weird = [_obs("salto_caxias", QDEF, 11700.0),
-             _obs("hotel_cataratas", QOBS, 4000.0, source="ana")]
-    rep = report.build(_frame(weird), _cfg(), now=NOW)
-    assert any("por debajo de la defluencia" in n for n in rep.notes)
+def _series(site, var, values_by_hours_ago, source="ana"):
+    return [_obs(site, var, v, hours_ago=h, source=source) for h, v in values_by_hours_ago]
+
+
+def test_report_flags_implausible_cascade_with_travel_time():
+    # Cataratas compara contra Capanema hace 11 h (viaje configurado).
+    obs = (_series("porto_capanema", QOBS, [(h, 11700.0) for h in range(0, 14)])
+           + _series("hotel_cataratas", QOBS, [(0, 4000.0)]))
+    rep = report.build(_frame(obs), _cfg(), now=NOW)
+    assert any("Cataratas" in n and "hace 11 h" in n for n in rep.notes)
+
+
+def test_report_does_not_flag_a_flood_wave_in_transit():
+    """Datos reales del 24-oct: la onda ya pasó por Capanema y no llegó a
+    Cataratas. Comparar valores simultáneos daba una falsa alarma."""
+    capanema = [(h, 8700.0) for h in range(11, 30)] + [(h, 8700 + (11 - h) * 180.0) for h in range(0, 11)]
+    obs = (_series("porto_capanema", QOBS, capanema)
+           + _series("hotel_cataratas", QOBS, [(h, 9100.0) for h in range(0, 30)]))
+    rep = report.build(_frame(obs), _cfg(), now=NOW)
+    assert not any("por debajo" in n for n in rep.notes)
+
+
+def test_coherence_check_skips_when_history_is_too_short():
+    obs = (_series("porto_capanema", QOBS, [(0, 11700.0), (1, 11600.0)])
+           + _series("hotel_cataratas", QOBS, [(0, 4000.0)]))
+    rep = report.build(_frame(obs), _cfg(), now=NOW)
+    assert not any("Cataratas" in n for n in rep.notes)
 
 
 def test_report_on_empty_store_explains_itself():
