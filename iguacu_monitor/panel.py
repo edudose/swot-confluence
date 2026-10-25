@@ -374,13 +374,20 @@ def wave_section(report: Report, cfg: Config, tz: timezone) -> str:
 # Rampa azul validada (pasos 700 -> 100). En fondo oscuro el ancla se invierte:
 # lo seco queda cerca del fondo y lo lluvioso brilla.
 RAIN_BREAKS = (10, 25, 50, 75, 100, 150)              # mm, límites de clase
+# 48 h o más: la misma rampa corrida, para que un evento de 150-200 mm no
+# quede todo en las dos clases más claras.
+RAIN_BREAKS_LONG = (25, 50, 75, 100, 150, 200)
+
+
+def rain_breaks(window: int) -> tuple[int, ...]:
+    return RAIN_BREAKS_LONG if window >= 48 else RAIN_BREAKS
 RAIN_RAMP = ("#0d366b", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb")
 
 
-def rain_color(mm: float | None) -> str:
+def rain_color(mm: float | None, breaks: tuple[int, ...] = RAIN_BREAKS) -> str:
     if mm is None:
         return "var(--panel-hi)"
-    for i, edge in enumerate(RAIN_BREAKS):
+    for i, edge in enumerate(breaks):
         if mm < edge:
             return RAIN_RAMP[i]
     return RAIN_RAMP[-1]
@@ -419,6 +426,10 @@ def rain_section(report: Report, cfg: Config, window: int = 24, tz: timezone | N
     if not subs:
         return ""
     contour = subbasins.outline(list(subs.values()))
+    breaks = rain_breaks(window)
+
+    def count(sb) -> int:
+        return sb.n_by_window.get(window, sb.n_gauges)
     xy, height = _project(contour.bounds)
 
     shapes, labels = [], []
@@ -427,8 +438,8 @@ def rain_section(report: Report, cfg: Config, window: int = 24, tz: timezone | N
         mm = sb.gauge_mm.get(window)
         bits = [f"{w} h {fmt_dec(sb.gauge_mm[w])} mm" for w in sorted(sb.gauge_mm)]
         tip = (f"{sb.order}. {sb.name} · área incremental {fmt_int(sb.area_km2)} km² · "
-               + " · ".join(bits) + f" · {sb.n_gauges} pluviómetros con dato")
-        shapes.append(f'<path class="sb" d="{_path(geom, xy)}" fill="{rain_color(mm)}" '
+               + " · ".join(bits) + f" · {count(sb)} pluviómetros con dato en {window} h")
+        shapes.append(f'<path class="sb" d="{_path(geom, xy)}" fill="{rain_color(mm, breaks)}" '
                       f'fill-rule="evenodd"><title>{escape(tip)}</title></path>')
         pt = subs[sb.id].geom.representative_point()
         lx, ly = xy(pt.x, pt.y)
@@ -457,19 +468,22 @@ def rain_section(report: Report, cfg: Config, window: int = 24, tz: timezone | N
                        f'transform="rotate(45 {x} {y})"><title>{escape(site.label)}</title></rect>')
 
     swatches = "".join(f'<span class="sw" style="background:{c}"></span>' for c in RAIN_RAMP)
-    ticks = "".join(f"<span>{t}</span>" for t in ("0", *map(str, RAIN_BREAKS)))
+    ticks = "".join(f"<span>{t}</span>" for t in ("0", *map(str, breaks)))
+    marks = {"ANA": '<circle cx="6" cy="6" r="3.5" fill="currentColor"/>',
+             "CEMADEN": '<circle cx="6" cy="6" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/>'}
+    symbols = "".join(f'<li class="sym"><svg viewBox="0 0 12 12" aria-hidden="true">{marks[n]}</svg>pluviómetro {n}</li>'
+                      for n in sorted(nets or {"ANA": 0}) if n in marks)
     legend = f'''<ul class="legend" aria-label="Escala de lluvia en {window} h, en milímetros">
   <li><div class="ramp">{swatches}</div><div class="ticks">{ticks}</div></li>
   <li>mm en {window} h</li>
-  <li class="sym"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.5" fill="currentColor"/></svg>pluviómetro ANA</li>
-  <li class="sym"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>pluviómetro CEMADEN</li>
+  {symbols}
   <li class="sym"><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" transform="rotate(45 6 6)" fill="currentColor"/></svg>punto de control</li>
 </ul>'''
 
     windows = sorted({w for sb in report.subbasins for w in sb.gauge_mm})
     head = "".join(f"<th>{w} h</th>" for w in windows)
     rows = []
-    without = [sb.name for sb in report.subbasins if sb.n_gauges == 0]
+    without = [sb.name for sb in report.subbasins if count(sb) == 0]
     for sb in report.subbasins:
         cells = []
         for w in windows:
@@ -477,12 +491,12 @@ def rain_section(report: Report, cfg: Config, window: int = 24, tz: timezone | N
             cls = ' class="hl"' if w == window else ""
             cells.append(f"<td{cls}>{fmt_dec(v) if v is not None else '—'}</td>")
         m1 = sb.merge_mm.get(1)
-        n_cls = ' class="dim"' if sb.n_gauges == 0 else ""
+        n_cls = ' class="dim"' if count(sb) == 0 else ""
         rows.append(
             f"<tr><td>{sb.order}</td>"
-            f'<td><span class="chip-sw" style="background:{rain_color(sb.gauge_mm.get(window))}"></span>'
+            f'<td><span class="chip-sw" style="background:{rain_color(sb.gauge_mm.get(window), breaks)}"></span>'
             f"{escape(sb.name)}</td>"
-            f"<td class=\"dim\">{fmt_int(sb.area_km2)}</td><td{n_cls}>{sb.n_gauges}</td>"
+            f"<td class=\"dim\">{fmt_int(sb.area_km2)}</td><td{n_cls}>{count(sb)}</td>"
             + "".join(cells)
             + f"<td class=\"dim\">{fmt_dec(m1) if m1 is not None else '—'}</td></tr>")
     note = (f"{escape(join_names(without))} no {'tiene' if len(without) == 1 else 'tienen'} "
@@ -505,7 +519,7 @@ def rain_section(report: Report, cfg: Config, window: int = 24, tz: timezone | N
       <thead><tr><th>#</th><th>Área incremental</th><th>km²</th><th>pluv.</th>{head}<th>MERGE 1 d</th></tr></thead>
       <tbody>{"".join(rows)}</tbody>
     </table></div>
-    <p class="tbl-note">Valores en mm. {note}"pluv." cuenta los pluviómetros con dato en 24 h, de ANA y CEMADEN; las demás ventanas salen sólo de ANA, porque CEMADEN publica únicamente el acumulado de 24 h. Se descartan los pluviómetros secos entre vecinos con lluvia. MERGE: lámina diaria satelital-pluviométrica de INPE, de 12 a 12 UTC, con rezago. Subcuencas delimitadas con HydroSHEDS y validadas contra las áreas de drenaje de ANA (error ≤ 0,2 %).</p>{credit}
+    <p class="tbl-note">Valores en mm. {note}"pluv." cuenta los pluviómetros con dato en {window} h. La ventana de 24 h combina ANA y CEMADEN; las demás salen sólo de ANA, porque CEMADEN publica únicamente el acumulado de 24 h. Se descartan los pluviómetros secos entre vecinos con lluvia. MERGE: lámina diaria satelital-pluviométrica de INPE, de 12 a 12 UTC, con rezago. Subcuencas delimitadas con HydroSHEDS y validadas contra las áreas de drenaje de ANA (error ≤ 0,2 %).</p>{credit}
   </div>
 </section>'''
 
@@ -883,6 +897,59 @@ def render(report: Report, cfg: Config, *, note: str | None = None,
   <footer class="foot">
     {f"<ul>{notes}</ul>" if notes else ""}
     <p>Fuentes: COPEL (usinas y puestos, horario; pronóstico SIMEPAR de União da Vitória), ONS (usinas, horario), ANA (caudal y pluviómetros), CEMADEN (pluviómetros, 24 h), INPE MERGE (lluvia diaria), HydroSHEDS (subcuencas; Lehner et al., 2008) · la lluvia medida de la cabecera es la mediana de los pluviómetros, no una media areal · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>
+  </footer>
+</main>'''
+
+    if fragment:
+        return f"{head}\n{body}\n"
+    return (f'<!doctype html>\n<html lang="es">\n<head>\n<meta charset="utf-8">\n'
+            f'<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
+            f'{head}\n</head>\n<body>\n{body}\n</body>\n</html>\n')
+
+
+def render_rain(report: Report, cfg: Config, *, window: int = 72, fragment: bool = False) -> str:
+    """Salida independiente: sólo la lluvia por subcuenca, con el mapa en
+    `window` horas. Mismo estilo que el panel, para mostrarla aparte."""
+    tz = timezone(timedelta(hours=float(cfg.report.get("display_utc_offset_h", -3))))
+    g = report.gauges.get(window)
+    shown = (g.until if g and g.until else report.generated).astimezone(tz)
+    clock = f"{shown:%H:%M}"
+    date_line = f"{DIAS[shown.weekday()]} {shown.day} {MESES[shown.month - 1]} {shown.year} · hora local"
+    who = cfg.report.get("processed_by")
+    by = f'\n      <p class="by">Procesado por: {escape(who)}</p>' if who else ""
+
+    pills = []
+    if g:
+        nets = " y ".join(sorted(g.by_network))
+        pills.append(f'<li class="pill"><span class="k">Lluvia medida {window} h</span>'
+                     f'mediana {fmt_dec(g.median)} mm · máx {fmt_dec(g.max_value)} mm '
+                     f'({escape(station_title(g.max_name))}) · {g.n} pluviómetros {nets}</li>')
+    if report.precip:
+        bits = [f"{w} d {fmt_dec(report.precip[w])} mm" for w in (1, 3, 7) if w in report.precip]
+        pills.append(f'<li class="pill"><span class="k">MERGE media areal</span>{" · ".join(bits)}</li>')
+    summary = f'<ul class="summary">{"".join(pills)}</ul>' if pills else ""
+    notes = "".join(f"<li>{escape(n)}</li>" for n in report.notes if "pluviómetro" in n or "MERGE" in n)
+
+    head = f'''<title>Lluvia por subcuenca</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="{FONTS}">
+<style>{CSS}</style>'''
+
+    body = f'''<main class="wrap">
+  <header class="top">
+    <div>
+      <h1>Cuenca del {escape(cfg.basin.name.replace("Rio ", "").replace("Iguaçu", "Iguazú"))}</h1>
+      <p class="sub">Lluvia por subcuenca, últimas {window} h</p>{by}
+    </div>
+    <div class="clock"><span class="t">{clock}</span><span class="d">{date_line}</span></div>
+  </header>
+  {summary}
+  {rain_section(report, cfg, window=window, tz=tz)}
+  <footer class="foot">
+    {f"<ul>{notes}</ul>" if notes else ""}
+    <p>Fuentes: ANA (pluviómetros), CEMADEN (pluviómetros, 24 h), INPE MERGE (lluvia diaria), HydroSHEDS (subcuencas; Lehner et al., 2008) · la hora indica el final de la ventana de {window} h · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>
   </footer>
 </main>'''
 

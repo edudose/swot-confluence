@@ -333,6 +333,7 @@ class SubBasinRain:
     order: int
     area_km2: float
     n_gauges: int                                          # pluviómetros dentro
+    n_by_window: dict[int, int] = field(default_factory=dict)  # los mismos, por ventana
     gauge_mm: dict[int, float] = field(default_factory=dict)   # IDW, por ventana en h
     merge_mm: dict[int, float] = field(default_factory=dict)   # MERGE, por días
 
@@ -380,6 +381,10 @@ def subbasin_rain(frame, cfg: Config, now: datetime, totals_by_window) -> tuple[
                                   n_gauges=sum(1 for k in inside_keys & with_data
                                                if contains_xy(s.geom, *coords[k])))
                for s in subs}
+    for w, wt in totals_by_window.items():
+        keys = inside_keys & set(wt.totals.index)
+        for s in subs:
+            results[s.id].n_by_window[w] = sum(1 for k in keys if contains_xy(s.geom, *coords[k]))
 
     for w in windows:
         if w not in totals_by_window:

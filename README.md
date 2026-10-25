@@ -29,6 +29,7 @@ iguacu-monitor fetch --days 7        # descargar y acumular
 iguacu-monitor report                # estado de la cuenca
 iguacu-monitor html                  # panel HTML de la cascada
 iguacu-monitor html --demo           # el panel con datos de ejemplo, sin red
+iguacu-monitor lluvia                # sólo la lluvia por subcuenca, mapa en 72 h (--ventana 24…)
 iguacu-monitor pluviometros          # rearmar la lista de pluviómetros ANA (API nueva)
 iguacu-monitor pluviometros --red cemaden   # rearmar la lista de CEMADEN
 iguacu-monitor subcuencas            # volver a delimitar las subcuencas (extra [geo])

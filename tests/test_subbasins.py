@@ -132,3 +132,20 @@ def test_stale_rain_is_flagged_with_its_last_reading():
     page = panel.render(late, cfg, fragment=True)
     assert "Último dato de los pluviómetros: sáb 22 h (hace 9 h)" in page
     assert "Lluvia medida 24 h hasta sáb 22 h" in page
+
+
+def test_standalone_rain_page_maps_72h_with_the_long_scale():
+    cfg = _cfg()
+    rep = report.build(_uniform_gauge_rain(1.0, hours=80), cfg, now=NOW)
+    page = panel.render_rain(rep, cfg, window=72, fragment=True)
+    assert "<title>Lluvia por subcuenca</title>" in page
+    assert "Lluvia por subcuenca · 72 h" in page and "mm en 72 h" in page
+    assert "<span>200</span>" in page                       # escala corrida para 72 h
+    assert "pluviómetro CEMADEN" not in page                # en 72 h sólo entra ANA
+    assert page.count('class="sb"') == _n()
+    assert "Regulación de la cascada" not in page           # sólo la lluvia
+
+
+@pytest.mark.parametrize("mm,window,color", [(120, 24, "#9ec5f4"), (120, 72, "#6da7ec"), (210, 72, "#cde2fb")])
+def test_long_windows_shift_the_rain_ramp(mm, window, color):
+    assert panel.rain_color(mm, panel.rain_breaks(window)) == color

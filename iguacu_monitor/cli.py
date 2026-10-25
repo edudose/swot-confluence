@@ -232,6 +232,21 @@ def cmd_html(args) -> int:
     return 0
 
 
+def cmd_lluvia(args) -> int:
+    """Salida independiente con la lluvia por subcuenca."""
+    cfg = config.load(args.config)
+    windows = [int(w) for w in cfg.report.get("subbasin_windows_h", (12, 24, 36, 48, 72))]
+    if args.ventana not in windows:
+        print(f"la ventana debe ser una de {windows} (subbasin_windows_h)", file=sys.stderr)
+        return 1
+    rep = report.build(store.load(cfg.store_path), cfg)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(panel.render_rain(rep, cfg, window=args.ventana, fragment=args.fragment), encoding="utf-8")
+    print(f"lluvia por subcuenca ({args.ventana} h) escrita en {out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="iguacu-monitor",
@@ -274,6 +289,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fragment", action="store_true",
                    help="sin <html>/<head>/<body>, para incrustar o publicar")
     p.set_defaults(func=cmd_html)
+
+    p = sub.add_parser("lluvia", help="escribir sólo la lluvia por subcuenca, como salida aparte")
+    p.add_argument("--out", default="panel/lluvia.html", help="archivo de salida")
+    p.add_argument("--ventana", type=int, default=72, help="horas que muestra el mapa (defecto: 72)")
+    p.add_argument("--fragment", action="store_true",
+                   help="sin <html>/<head>/<body>, para incrustar o publicar")
+    p.set_defaults(func=cmd_lluvia)
 
     args = parser.parse_args(argv)
     logging.basicConfig(
