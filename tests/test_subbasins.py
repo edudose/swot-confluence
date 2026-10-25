@@ -108,6 +108,7 @@ def test_panel_draws_the_rain_map():
     assert page.count('class="sb"') == _n()
     assert page.count('class="outlet"') == _n()
     assert "interpolar los vecinos" in page          # Cataratas no tiene pluviómetros
+    assert "Procesado por: Sector Hidrología / D.T EBY" in page
 
 
 @pytest.mark.parametrize("mm,color", [(0, "#0d366b"), (24.9, "#184f95"), (101, "#9ec5f4"), (500, "#cde2fb")])

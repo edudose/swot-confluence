@@ -377,6 +377,8 @@ def rain_section(report: Report, cfg: Config, window: int = 24) -> str:
             + f"<td class=\"dim\">{fmt_dec(m1) if m1 is not None else '—'}</td></tr>")
     note = (f"{escape(join_names(without))} no {'tiene' if len(without) == 1 else 'tienen'} "
             f"pluviómetros dentro: su valor sale de interpolar los vecinos. " if without else "")
+    who = cfg.report.get("processed_by")
+    credit = f'\n    <p class="credit">Procesado por: {escape(who)}</p>' if who else ""
     return f'''<section class="rain" aria-label="Lluvia por subcuenca">
   <div class="map-card">
     <div><h2>Lluvia por subcuenca · {window} h</h2>
@@ -391,7 +393,7 @@ def rain_section(report: Report, cfg: Config, window: int = 24) -> str:
       <thead><tr><th>#</th><th>Área incremental</th><th>km²</th><th>pluv.</th>{head}<th>MERGE 1 d</th></tr></thead>
       <tbody>{"".join(rows)}</tbody>
     </table></div>
-    <p class="tbl-note">Valores en mm. {note}"pluv." cuenta los pluviómetros con dato en 24 h. MERGE: lámina diaria satelital-pluviométrica de INPE, de 12 a 12 UTC, con rezago. Subcuencas delimitadas con HydroSHEDS y validadas contra las áreas de drenaje de ANA (error ≤ 0,2 %).</p>
+    <p class="tbl-note">Valores en mm. {note}"pluv." cuenta los pluviómetros con dato en 24 h. MERGE: lámina diaria satelital-pluviométrica de INPE, de 12 a 12 UTC, con rezago. Subcuencas delimitadas con HydroSHEDS y validadas contra las áreas de drenaje de ANA (error ≤ 0,2 %).</p>{credit}
   </div>
 </section>'''
 
@@ -549,6 +551,7 @@ table.sbt { width: 100%; border-collapse: collapse; font-variant-numeric: tabula
 .sbt .chip-sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 .sbt tr:last-child td { border-bottom: 0; }
 .tbl-note { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.credit { margin: 0; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8rem; font-weight: 500; }
 @media (min-width: 1100px) { .rain { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); } }
 
 /* Onda hacia Cataratas: una secuencia en el tiempo, de lo que hay ahora a lo
