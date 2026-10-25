@@ -32,6 +32,9 @@ from iguacu_monitor.sources.base import Source
 # Los datos de ANA vienen en hora local de Brasilia (UTC-3), sin indicarlo.
 BRASILIA = timezone(timedelta(hours=-3))
 
+# La API nueva rechaza (HTTP 406) pedidos de más de 10 estaciones.
+HWS_MAX_STATIONS = 10
+
 # Ventanas que acepta la API nueva, de menor a mayor.
 HWS_RANGES = ((2, "DIAS_2"), (7, "DIAS_7"), (14, "DIAS_14"), (21, "DIAS_21"), (30, "DIAS_30"))
 
@@ -191,30 +194,44 @@ class ANA(Source):
         # todavía no empezó (de noche en UTC ya es "mañana").
         end = min(end, datetime.now(BRASILIA).date())
         rows: list[dict] = []
-        for busca, label in hws_windows(start, end):
-            resp = http.get(
-                f"{self.hws_base}/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v2",
-                params={
-                    "Codigos_Estacoes": ",".join(str(c) for c in codes),
-                    "Tipo Filtro Data": "DATA_LEITURA",
-                    "Data de Busca (yyyy-MM-dd)": busca.isoformat(),
-                    "Range Intervalo de busca": label,
-                },
-                headers={"Authorization": f"Bearer {self._hws_token()}"},
-                timeout=self.opts.get("timeout", 90),
-            )
-            resp.raise_for_status()
-            rows.extend(resp.json().get("items") or [])
+        for i in range(0, len(codes), HWS_MAX_STATIONS):
+            batch = ",".join(str(c) for c in codes[i:i + HWS_MAX_STATIONS])
+            for busca, label in hws_windows(start, end):
+                resp = http.get(
+                    f"{self.hws_base}/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v2",
+                    params={
+                        "Codigos_Estacoes": batch,
+                        "Tipo Filtro Data": "DATA_LEITURA",
+                        "Data de Busca (yyyy-MM-dd)": busca.isoformat(),
+                        "Range Intervalo de busca": label,
+                    },
+                    headers={"Authorization": f"Bearer {self._hws_token()}"},
+                    timeout=self.opts.get("timeout", 90),
+                )
+                resp.raise_for_status()
+                rows.extend(resp.json().get("items") or [])
         return rows
 
     def _parse_hws(self, rows: list[dict], start: date, end: date) -> list[Observation]:
-        by_code = {str(s.ana_code): s.key for s in self.cfg.stations if s.ana_code}
+        stations = {str(s.ana_code): s.key for s in self.cfg.stations if s.ana_code}
+        gauges = {str(g.code): g.key for g in self.cfg.gauges}
+        all_fields = (("Vazao_Adotada", QOBS, 1.0),
+                      ("Cota_Adotada", LEVEL, 0.01),   # centímetros
+                      ("Chuva_Adotada", PRECIP, 1.0))
+        rain_only = (("Chuva_Adotada", PRECIP, 1.0),)
         out: list[Observation] = []
         seen: set[tuple] = set()
         for row in rows:
-            key = by_code.get(str(row.get("codigoestacao", "")).strip())
+            code = str(row.get("codigoestacao", "")).strip()
             stamp = str(row.get("Data_Hora_Medicao") or "")[:19]
-            if not key or not stamp:
+            # Una estación puede ser a la vez del tronco y pluviómetro (União
+            # da Vitória): la lluvia va a las dos claves.
+            targets = []
+            if code in stations:
+                targets.append((stations[code], all_fields))
+            if code in gauges:
+                targets.append((gauges[code], rain_only))
+            if not targets or not stamp:
                 continue
             try:
                 local = datetime.strptime(stamp, "%Y-%m-%d %H:%M:%S").replace(tzinfo=BRASILIA)
@@ -223,19 +240,77 @@ class ANA(Source):
             if not (start <= local.date() <= end):
                 continue
             when = local.astimezone(timezone.utc)
-            for field, var, scale in (("Vazao_Adotada", QOBS, 1.0),
-                                      ("Cota_Adotada", LEVEL, 0.01),   # centímetros
-                                      ("Chuva_Adotada", PRECIP, 1.0)):
-                value = _to_float(row.get(field))
-                if value is None or (key, var, when) in seen:
-                    continue
-                seen.add((key, var, when))
-                out.append(Observation(
-                    source=self.name, site=key, variable=var, timestamp=when,
-                    value=value * scale,
-                    meta={"status": row.get(f"{field}_Status")},
-                ))
+            for key, fields in targets:
+                for field, var, scale in fields:
+                    value = _to_float(row.get(field))
+                    if value is None or (key, var, when) in seen:
+                        continue
+                    seen.add((key, var, when))
+                    out.append(Observation(
+                        source=self.name, site=key, variable=var, timestamp=when,
+                        value=value * scale,
+                        meta={"status": row.get(f"{field}_Status")},
+                    ))
         return out
+
+    def discover_gauges(self) -> tuple[list[dict], list[str]]:
+        """Pluviómetros telemétricos vivos dentro de la cuenca.
+
+        Devuelve (pluviómetros, notas). Filtra el inventario por subcuenca,
+        telemetría y operación, recorta con la cuenca, y conserva las
+        estaciones que reportaron lluvia en las últimas 48 h: el inventario
+        no dice qué sensores transmiten de verdad.
+        """
+        opts = self.cfg.gauges_opts
+        token = self._hws_token()
+        resp = http.get(
+            f"{self.hws_base}/EstacoesTelemetricas/HidroInventarioEstacoes/v1",
+            params={"Código da Bacia": str(opts.get("ana_bacia", 6))},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=max(self.opts.get("timeout", 90), 240),
+        )
+        resp.raise_for_status()
+        inventory = resp.json().get("items") or []
+
+        sub = str(opts.get("ana_sub_bacia", ""))
+        candidates: list[dict] = []
+        for row in inventory:
+            lat, lon = _to_float(row.get("Latitude")), _to_float(row.get("Longitude"))
+            if (sub and str(row.get("Sub_Bacia_Codigo")) != sub) or lat is None or lon is None:
+                continue
+            if str(row.get("Tipo_Estacao_Telemetrica")) != "1" or str(row.get("Operando")) != "1":
+                continue
+            if not self.cfg.basin.contains(lon, lat):
+                continue
+            candidates.append(row)
+
+        end = datetime.now(BRASILIA).date()
+        rows = self._hws_rows([int(r["codigoestacao"]) for r in candidates], end - timedelta(days=1), end)
+        counts: dict[str, int] = {}
+        for row in rows:
+            if _to_float(row.get("Chuva_Adotada")) is not None:
+                code = str(row.get("codigoestacao", "")).strip()
+                counts[code] = counts.get(code, 0) + 1
+
+        minimum = int(opts.get("min_records_48h", 24))
+        gauges = [
+            {
+                "code": int(r["codigoestacao"]),
+                "name": str(r.get("Estacao_Nome", "")).strip(),
+                "operator": str(r.get("Operadora_Sigla", "")).strip(),
+                "lat": round(_to_float(r["Latitude"]), 4),
+                "lon": round(_to_float(r["Longitude"]), 4),
+                "records_48h": counts.get(str(r["codigoestacao"]), 0),
+            }
+            for r in candidates if counts.get(str(r["codigoestacao"]), 0) >= minimum
+        ]
+        gauges.sort(key=lambda g: g["code"])
+        notes = [
+            f"{len(inventory)} estaciones en el inventario de la bacia {opts.get('ana_bacia', 6)}",
+            f"{len(candidates)} telemétricas operando en la subcuenca {sub} dentro de la cuenca",
+            f"{len(gauges)} reportaron lluvia al menos {minimum} veces en 48 h",
+        ]
+        return gauges, notes
 
     # ------------------------------------------------------------- discovery
     def discover(self, name_fragment: str) -> list[dict[str, str]]:
@@ -331,6 +406,7 @@ class ANA(Source):
     def fetch(self, start: date, end: date) -> list[Observation]:
         if self.uses_hws:
             codes = [int(s.ana_code) for s in self.cfg.stations if s.ana_code]
+            codes += [g.code for g in self.cfg.gauges if g.code not in codes]
             return self._parse_hws(self._hws_rows(codes, start, end), start, end)
         out: list[Observation] = []
         for site in self.cfg.stations:

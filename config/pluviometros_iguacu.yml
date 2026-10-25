@@ -1,0 +1,549 @@
+# Pluviómetros telemétricos de ANA en la cuenca del Iguazú.
+# Generado por `iguacu-monitor pluviometros` el 2026-10-25 01:42 UTC. Se puede editar a mano.
+gauges:
+- code: 2551063
+  name: UHE SALTO SANTIAGO GOIOXIM
+  operator: ENGIE
+  lat: -25.2406
+  lon: -51.9275
+  records_48h: 47
+- code: 2551069
+  name: UHE SALTO OSÓRIO PINHÃO
+  operator: ENGIE
+  lat: -25.6617
+  lon: -51.6622
+  records_48h: 27
+- code: 2551070
+  name: UHE FUNDÃO GUARAPUAVA
+  operator: ELEJOR
+  lat: -25.3847
+  lon: -51.4939
+  records_48h: 188
+- code: 2551072
+  name: UHE SANTA CLARA ENTRE RIOS
+  operator: ELEJOR
+  lat: -25.5458
+  lon: -51.4883
+  records_48h: 185
+- code: 2552009
+  name: UHE SALTO OSÓRIO LARANJEIRAS DO SUL
+  operator: ENGIE
+  lat: -25.3978
+  lon: -52.435
+  records_48h: 47
+- code: 65004995
+  name: PONTE PR-415
+  operator: IAT-PR
+  lat: -25.4506
+  lon: -49.1211
+  records_48h: 190
+- code: 65006090
+  name: COMPORTA CANAL ÁGUA LIMPA
+  operator: IAT-PR
+  lat: -25.4857
+  lon: -49.1813
+  records_48h: 382
+- code: 65010000
+  name: FAZENDINHA
+  operator: IAT-PR
+  lat: -25.5192
+  lon: -49.1456
+  records_48h: 378
+- code: 65025000
+  name: GUAJUVIRA
+  operator: IAT-PR
+  lat: -25.6003
+  lon: -49.5133
+  records_48h: 382
+- code: 65028000
+  name: BALSA NOVA
+  operator: IAT-PR
+  lat: -25.5886
+  lon: -49.6319
+  records_48h: 380
+- code: 65031300
+  name: PCH LÚCIA CHEROBIM MONTANTE 2
+  operator: CHEROBIM
+  lat: -25.6014
+  lon: -49.6314
+  records_48h: 188
+- code: 65031400
+  name: PCH LÚCIA CHEROBIM MONTANTE 1
+  operator: CHEROBIM
+  lat: -25.5711
+  lon: -49.7908
+  records_48h: 380
+- code: 65031500
+  name: PCH LÚCIA CHEROBIM JUSANTE
+  operator: CHEROBIM
+  lat: -25.5436
+  lon: -49.8747
+  records_48h: 364
+- code: 65035001
+  name: UHE GOV. NEY AMINTHAS PORTO AMAZONAS
+  operator: COPEL
+  lat: -25.5481
+  lon: -49.8894
+  records_48h: 96
+- code: 65060001
+  name: UHE GOV. NEY AMINTHAS SÃO MATEUS DO SUL
+  operator: COPEL
+  lat: -25.8756
+  lon: -50.3894
+  records_48h: 95
+- code: 65094400
+  name: CGH SALTO GRANDE BARRAMENTO
+  operator: C.V.G
+  lat: -26.4669
+  lon: -49.5967
+  records_48h: 96
+- code: 65100001
+  name: PCH DERIVAÇÃO DO RIO JORDÃO RIO NEGRO
+  operator: COPEL
+  lat: -26.1097
+  lon: -49.8011
+  records_48h: 95
+- code: 65141000
+  name: PCH CANHADÃO JUSANTE
+  operator: CANHADÃO
+  lat: -25.9736
+  lon: -52.1683
+  records_48h: 96
+- code: 65155001
+  name: CGH CAVERNOSO SÃO BENTO
+  operator: CAVERNOSO I
+  lat: -25.9439
+  lon: -49.7961
+  records_48h: 96
+- code: 65175001
+  name: PCH DERIVAÇÃO DO RIO JORDÃO DIVISA
+  operator: COPEL
+  lat: -26.0914
+  lon: -50.3339
+  records_48h: 96
+- code: 65220001
+  name: UHE GOV. BENTO MUNHOZ FLUVIÓPOLIS
+  operator: F.D.A.
+  lat: -26.0192
+  lon: -50.5925
+  records_48h: 96
+- code: 65258000
+  name: PCH RIO TIMBÓ MONTANTE
+  operator: CIABS
+  lat: -26.6144
+  lon: -50.6761
+  records_48h: 96
+- code: 65259000
+  name: PCH RIO TIMBÓ RIO CAÇADOR GRANDE
+  operator: CIABS
+  lat: -26.5936
+  lon: -50.7283
+  records_48h: 96
+- code: 65260001
+  name: UHE GOVERNADOR BENTO MUNHOZ FOZ DO CACHOEIRA
+  operator: F.D.A.
+  lat: -26.5875
+  lon: -50.7283
+  records_48h: 96
+- code: 65271000
+  name: PCH RIO TIMBÓ JUSANTE
+  operator: CIABS
+  lat: -26.4597
+  lon: -50.8122
+  records_48h: 96
+- code: 65271200
+  name: CGH CENTRAL III JUSANTE
+  operator: BONET
+  lat: -26.5556
+  lon: -50.6011
+  records_48h: 96
+- code: 65275000
+  name: CGH RIO BONITO JUSANTE
+  operator: RIO BONITO
+  lat: -26.4631
+  lon: -50.8883
+  records_48h: 96
+- code: 65280000
+  name: CGH BAITACA JUSANTE
+  operator: RIO BONITO
+  lat: -26.4406
+  lon: -50.8344
+  records_48h: 96
+- code: 65293000
+  name: PCH PARDOS JUSANTE
+  operator: PARDOS
+  lat: -26.4472
+  lon: -50.9861
+  records_48h: 96
+- code: 65310001
+  name: UHE GOV. BENTO MUNHOZ UNIÃO DA VITÓRIA
+  operator: F.D.A.
+  lat: -26.2281
+  lon: -51.0803
+  records_48h: 96
+- code: 65365801
+  name: UHE GOV. BENTO MUNHOZ R5 PORTO VITÓRIA
+  operator: F.D.A.
+  lat: -26.1653
+  lon: -51.2281
+  records_48h: 91
+- code: 65370001
+  name: UHE GOV. BENTO MUNHOZ JANGADA DO SUL
+  operator: F.D.A.
+  lat: -26.3869
+  lon: -51.2719
+  records_48h: 95
+- code: 65764001
+  name: UHE GOV. BENTO MUNHOZ MADEIREIRA GAVAZONI
+  operator: F.D.A.
+  lat: -25.8075
+  lon: -51.2886
+  records_48h: 96
+- code: 65774400
+  name: UHE GOV. BENTO MUNHOZ BARRAMENTO
+  operator: F.D.A.
+  lat: -26.0094
+  lon: -51.6647
+  records_48h: 96
+- code: 65775800
+  name: PCH FOZ DO ESTRELA MONTANTE
+  operator: SÃO LUIZ
+  lat: -26.1239
+  lon: -51.8739
+  records_48h: 94
+- code: 65775901
+  name: UHE GOV. NEY AMINTHAS SOLAIS NOVO
+  operator: COPEL
+  lat: -26.0931
+  lon: -51.8797
+  records_48h: 95
+- code: 65803001
+  name: UHE GOV. NEY AMINTHAS BARRAMENTO
+  operator: COPEL
+  lat: -25.7883
+  lon: -52.1147
+  records_48h: 95
+- code: 65809000
+  name: ETA - GUARAPUAVA
+  operator: IAT-PR
+  lat: -25.3978
+  lon: -51.4358
+  records_48h: 188
+- code: 65810100
+  name: CGH PARQUE I JUSANTE
+  operator: JORDÃO
+  lat: -25.4433
+  lon: -51.4583
+  records_48h: 96
+- code: 65812950
+  name: PCH TRÊS CAPÕES NOVO BARRAMENTO
+  operator: SANTA MARIA
+  lat: -25.4633
+  lon: -51.6628
+  records_48h: 96
+- code: 65813000
+  name: PCH TRÊS CAPÕES NOVO JUSANTE
+  operator: SANTA MARIA
+  lat: -25.4786
+  lon: -51.6717
+  records_48h: 96
+- code: 65813100
+  name: UHE SANTA CLARA MONTANTE
+  operator: ELEJOR
+  lat: -25.4878
+  lon: -51.7378
+  records_48h: 376
+- code: 65815040
+  name: UHE SALTO CURUCACA BARRAMENTO
+  operator: SANTA MARIA
+  lat: -25.5353
+  lon: -51.8158
+  records_48h: 96
+- code: 65815060
+  name: PCH TAGUÁ MONTANTE
+  operator: TAGUÁ
+  lat: -25.5044
+  lon: -51.7864
+  records_48h: 96
+- code: 65818580
+  name: PCH SÃO JERÔNIMO BARRAMENTO
+  operator: AGROINDUSTRIAL
+  lat: -25.6569
+  lon: -51.4439
+  records_48h: 92
+- code: 65819300
+  name: UHE SANTA CLARA RIO PINHÃO
+  operator: ELEJOR
+  lat: -25.6119
+  lon: -51.6531
+  records_48h: 376
+- code: 65824880
+  name: CGH RIO CAPIVARA JUSANTE
+  operator: CAPIVARA
+  lat: -25.6406
+  lon: -51.8603
+  records_48h: 80
+- code: 65824991
+  name: UHE SANTA CLARA BARRAMENTO
+  operator: ELEJOR
+  lat: -25.6558
+  lon: -51.9522
+  records_48h: 360
+- code: 65824998
+  name: CGH SALTO SÃO PEDRO MONTANTE
+  operator: ANASTASIA
+  lat: -25.6386
+  lon: -51.9669
+  records_48h: 96
+- code: 65825497
+  name: UHE FUNDÃO BARRAMENTO
+  operator: ELEJOR
+  lat: -25.7019
+  lon: -52.005
+  records_48h: 360
+- code: 65826450
+  name: CGH SANTA PAULA JUSANTE
+  operator: SANTA PAULA
+  lat: -25.4469
+  lon: -51.4678
+  records_48h: 96
+- code: 65826612
+  name: PCH DERIVAÇÃO DO RIO JORDÃO BARRAMENTO
+  operator: COPEL
+  lat: -25.7542
+  lon: -52.0872
+  records_48h: 96
+- code: 65831020
+  name: PCH TIGRE JUSANTE
+  operator: TIGRE
+  lat: -26.0411
+  lon: -52.175
+  records_48h: 96
+- code: 65831500
+  name: PCH FORQUILHA BARRAMENTO
+  operator: FORQUILHA
+  lat: -26.0053
+  lon: -52.1833
+  records_48h: 94
+- code: 65831900
+  name: PCH COVÓ MONTANTE
+  operator: COVÓ
+  lat: -25.9797
+  lon: -52.1614
+  records_48h: 94
+- code: 65854700
+  name: PCH CAVERNOSO IV BARRAMENTO
+  operator: VALE
+  lat: -25.4253
+  lon: -52.0867
+  records_48h: 96
+- code: 65855080
+  name: PCH CAVERNOSO II BARRAMENTO
+  operator: CAVERNOSO II
+  lat: -25.4878
+  lon: -52.2156
+  records_48h: 94
+- code: 65855090
+  name: CGH CAVERNOSO BARRAMENTO
+  operator: CAVERNOSO I
+  lat: -25.4936
+  lon: -52.2128
+  records_48h: 90
+- code: 65855110
+  name: PCH CAVERNOSO II JUSANTE
+  operator: CAVERNOSO II
+  lat: -25.5089
+  lon: -52.2292
+  records_48h: 114
+- code: 65875500
+  name: UHE SALTO SANTIAGO RIO CHOPINZINHO
+  operator: ENGIE
+  lat: -25.7808
+  lon: -52.4917
+  records_48h: 93
+- code: 65883051
+  name: UHE SALTO SANTIAGO BARRAMENTO
+  operator: ENGIE
+  lat: -25.6103
+  lon: -52.6164
+  records_48h: 91
+- code: 65889700
+  name: UHE SALTO OSÓRIO RIO DAS COBRAS
+  operator: ENGIE
+  lat: -25.4103
+  lon: -52.7406
+  records_48h: 93
+- code: 65894991
+  name: UHE SALTO OSÓRIO BARRAMENTO
+  operator: ENGIE
+  lat: -25.5331
+  lon: -53.0106
+  records_48h: 46
+- code: 65924300
+  name: CGH SALTO ESTRELA BARRAMENTO
+  operator: ESTRELA
+  lat: -26.3669
+  lon: -52.0086
+  records_48h: 96
+- code: 65925300
+  name: PCH TITO BARRAMENTO
+  operator: TITO
+  lat: -26.2489
+  lon: -52.4269
+  records_48h: 26
+- code: 65925350
+  name: CGH PINHO FLECK JUSANTE
+  operator: FAPOLPA
+  lat: -26.2422
+  lon: -52.4442
+  records_48h: 96
+- code: 65927001
+  name: PCH ARTURO ANDREOLI PORTO PALMEIRINHA
+  operator: FOZ DO CHOPIM
+  lat: -26.0289
+  lon: -52.6281
+  records_48h: 376
+- code: 65928000
+  name: CGH CHOPIM I BARRAMENTO
+  operator: CHOPIM I
+  lat: -25.9853
+  lon: -52.75
+  records_48h: 96
+- code: 65928100
+  name: CGH CHOPIM I JUSANTE
+  operator: CHOPIM I
+  lat: -25.9783
+  lon: -52.7364
+  records_48h: 96
+- code: 65945600
+  name: PCH VITORINO JUSANTE 2
+  operator: RIO VITORINO
+  lat: -25.9922
+  lon: -52.7858
+  records_48h: 96
+- code: 65950200
+  name: FRANCISCO BELTRÃO MTE. ETA
+  operator: IAT-PR
+  lat: -26.0817
+  lon: -53.0739
+  records_48h: 190
+- code: 65954150
+  name: PCH BEDIM MONTANTE
+  operator: SANTANA
+  lat: -26.0864
+  lon: -52.9394
+  records_48h: 96
+- code: 65954400
+  name: PCH VILA GALUPO BARRAMENTO
+  operator: SUDOESTE
+  lat: -26.0617
+  lon: -52.9222
+  records_48h: 96
+- code: 65954900
+  name: PCH JACARÉ BARRAMENTO
+  operator: VORTEX
+  lat: -26.0389
+  lon: -52.9331
+  records_48h: 96
+- code: 65956000
+  name: PCH ARTURO ANDREOLI RIO SANTANA
+  operator: FOZ DO CHOPIM
+  lat: -25.8831
+  lon: -52.8631
+  records_48h: 376
+- code: 65957000
+  name: PCH BELA VISTA RESERVATÓRIO
+  operator: VISTA
+  lat: -25.8181
+  lon: -52.9014
+  records_48h: 96
+- code: 65958000
+  name: PCH BELA VISTA JUSANTE
+  operator: VISTA
+  lat: -25.8058
+  lon: -52.9067
+  records_48h: 96
+- code: 65960001
+  name: UHE GOV. JOSÉ RICHA ÁGUAS DO VERE
+  operator: COPEL
+  lat: -25.7739
+  lon: -52.9244
+  records_48h: 96
+- code: 65962000
+  name: PCH ARTURO ANDREOLI FLOR DA SERRA
+  operator: FOZ DO CHOPIM
+  lat: -25.6822
+  lon: -52.9844
+  records_48h: 376
+- code: 65962600
+  name: PCH GENEROSO MONTANTE
+  operator: PARANHOS
+  lat: -25.6169
+  lon: -53.0639
+  records_48h: 96
+- code: 65962700
+  name: PCH GENEROSO JUSANTE
+  operator: PARANHOS
+  lat: -25.5942
+  lon: -53.0747
+  records_48h: 96
+- code: 65963071
+  name: PCH ARTURO ANDREOLI BARRAMENTO
+  operator: FOZ DO CHOPIM
+  lat: -25.5711
+  lon: -53.1133
+  records_48h: 376
+- code: 65970001
+  name: UHE GOV. JOSÉ RICHA PORTO SANTO ANTÔNIO
+  operator: COPEL
+  lat: -25.3939
+  lon: -53.1039
+  records_48h: 96
+- code: 65970600
+  name: CGH JARACATIÁ BARRAMENTO
+  operator: JARACATIA
+  lat: -25.6914
+  lon: -53.29
+  records_48h: 96
+- code: 65973501
+  name: UHE GOV. JOSÉ RICHA BARRAMENTO
+  operator: COPEL
+  lat: -25.5419
+  lon: -53.4844
+  records_48h: 96
+- code: 65975300
+  name: UHE BAIXO IGUAÇU RIO ANDRADA
+  operator: CÉU AZUL
+  lat: -25.4217
+  lon: -53.5003
+  records_48h: 381
+- code: 65978500
+  name: CGH MEIRELES BARRAMENTO
+  operator: MEIRELES
+  lat: -25.2878
+  lon: -53.4333
+  records_48h: 94
+- code: 65980200
+  name: UHE BAIXO IGUAÇU RIO CAPANEMA
+  operator: CÉU AZUL
+  lat: -25.9578
+  lon: -53.5492
+  records_48h: 364
+- code: 65981500
+  name: UHE ITAIPU PONTE DO CAPANEMA
+  operator: ITAIPU
+  lat: -25.77
+  lon: -53.6114
+  records_48h: 96
+- code: 65987000
+  name: UHE ITAIPU PORTO CAPANEMA
+  operator: ITAIPU
+  lat: -25.5667
+  lon: -53.9331
+  records_48h: 96
+- code: 65987001
+  name: UHE GOV. JOSÉ RICHA PORTO CAPANEMA
+  operator: COPEL
+  lat: -25.5667
+  lon: -53.9333
+  records_48h: 96

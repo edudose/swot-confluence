@@ -111,12 +111,114 @@ class SiteState:
 
 
 @dataclass
+class GaugeRain:
+    """Lluvia medida por los pluviómetros en una ventana.
+
+    No es una media areal: los pluviómetros no se reparten parejo sobre la
+    cuenca. La mediana es la cifra central, robusta a un sensor con falla.
+    """
+
+    window_h: int
+    n: int
+    median: float
+    mean: float
+    p90: float
+    max_value: float
+    max_name: str
+    # (nombre, total crudo en la ventana, motivo)
+    excluded: list[tuple[str, float, str]] = field(default_factory=list)
+
+
+def gauge_rain(frame, cfg: Config) -> dict[int, GaugeRain]:
+    """Totales por ventana de los pluviómetros, con control de calidad.
+
+    1. Un pluviómetro que supera la envolvente plausible en alguna lectura
+       o en las sumas móviles de 1 h y 3 h queda fuera de esa ventana:
+       recortar sólo la lectura dejaría un total parcial igual de dudoso.
+    2. Un pluviómetro entra en la ventana sólo si tiene al menos
+       `gauge_min_coverage` de las lecturas que su paso hace esperar.
+    3. Un total aislado (z robusto > `gauge_outlier_z`) queda fuera del
+       agregado y se informa: el estado de calidad de ANA no lo detecta.
+    El dato crudo no se modifica; el control se aplica al leer.
+    """
+    import numpy as np
+    import pandas as pd
+
+    opts = cfg.report
+    windows = [int(w) for w in opts.get("gauge_windows_h", (1, 3, 6, 24, 72))]
+    min_cov = float(opts.get("gauge_min_coverage", 0.8))
+    max_1h = float(opts.get("gauge_max_1h_mm", 100))
+
+    def envelope(hours: float) -> float:
+        return max_1h * hours ** 0.5
+    z_cut = float(opts.get("gauge_outlier_z", 6))
+    names = {g.key: g.name for g in cfg.gauges}
+
+    rain = frame[frame["site"].astype(str).str.startswith("pluv_") & (frame["variable"] == PRECIP)]
+    if rain.empty:
+        return {}
+    rain = rain.sort_values(["site", "timestamp"])
+    step_h = (rain.groupby("site")["timestamp"]
+                  .apply(lambda s: s.diff().median().total_seconds() / 3600 if len(s) > 1 else np.nan))
+    rain = rain.assign(step_h=rain["site"].map(step_h))
+    rain = rain[rain["step_h"].notna()]
+    if rain.empty:
+        return {}
+    by_site = rain.set_index("timestamp").groupby("site")["value"]
+    sum_1h = by_site.rolling("60min").sum().reset_index(level=0, drop=True).to_numpy()
+    sum_3h = by_site.rolling("180min").sum().reset_index(level=0, drop=True).to_numpy()
+    rain = rain.assign(impossible=(rain["value"] > envelope(1) * rain["step_h"] ** 0.5)
+                       | (sum_1h > envelope(1)) | (sum_3h > envelope(3)))
+    ref = rain["timestamp"].max()
+
+    out: dict[int, GaugeRain] = {}
+    for window in windows:
+        sel = rain[rain["timestamp"] > ref - pd.Timedelta(hours=window)]
+        counts = sel.groupby("site")["value"].count()
+        expected = window / step_h.reindex(counts.index)
+        totals = sel.groupby("site")["value"].sum()[counts >= min_cov * expected.clip(lower=1)]
+        if totals.empty:
+            continue
+
+        excluded: list[tuple[str, float, str]] = []
+        bad = set(sel.loc[sel["impossible"], "site"]) & set(totals.index)
+        for site in sorted(bad):
+            excluded.append((names.get(site, site), float(totals[site]),
+                             "lluvia por encima de lo físicamente plausible"))
+        totals = totals.drop(index=sorted(bad))
+        if totals.empty:
+            continue
+        if len(totals) >= 8:
+            med = totals.median()
+            # Piso de 10 mm para la dispersión: con la cuenca seca la MAD es
+            # cero y cualquier tormenta local parecería una falla. Con el
+            # piso, un total tiene que superar la mediana en ~90 mm para
+            # quedar fuera, y lo excluido siempre se informa.
+            scale = max(float((totals - med).abs().median()), 10.0)
+            z = 0.6745 * (totals - med) / scale
+            for site in totals[z > z_cut].index:
+                excluded.append((names.get(site, site), float(totals[site]), "total aislado"))
+            totals = totals[z <= z_cut]
+
+        top = totals.idxmax()
+        out[window] = GaugeRain(
+            window_h=window, n=int(len(totals)),
+            median=float(totals.median()), mean=float(totals.mean()),
+            p90=float(totals.quantile(0.9)),
+            max_value=float(totals.max()), max_name=names.get(top, top),
+            excluded=excluded,
+        )
+    return out
+
+
+@dataclass
 class Report:
     generated: datetime
     basin: str
     sites: list[SiteState]
     precip: dict[int, float]
     notes: list[str] = field(default_factory=list)
+    gauges: dict[int, GaugeRain] = field(default_factory=dict)
 
     @property
     def plants(self) -> list[SiteState]:
@@ -238,8 +340,17 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
         if state.stale and state.last_seen is not None:
             notes.append(f"{state.name}: último dato hace {state.age_hours:.0f} h")
 
+    gauges = gauge_rain(frame, cfg)
+    flagged: dict[str, tuple[int, float, str]] = {}
+    for w in sorted(gauges):
+        for name, total, reason in gauges[w].excluded:
+            flagged[name] = (w, total, reason)          # queda la ventana más larga
+    for name, (w, total, reason) in flagged.items():
+        notes.append(f"pluviómetro excluido de la lluvia medida: {name} "
+                     f"({reason}; {total:,.0f} mm en {w} h)")
+
     return Report(generated=now, basin=cfg.basin.name, sites=states,
-                  precip=precip, notes=notes)
+                  precip=precip, notes=notes, gauges=gauges)
 
 
 def render_text(report: Report) -> str:
@@ -273,6 +384,15 @@ def render_text(report: Report) -> str:
         age = f"hace {state.age_hours:.0f} h" if state.age_hours is not None else "sin dato"
         lines.append(f"  {state.display_name[:name_w]:<{name_w}}"
                      f"{cell(state, QOBS)}   {age}")
+
+    if report.gauges:
+        lines += ["", "LLUVIA MEDIDA (mm, pluviómetros ANA; no es media areal)",
+                  f"  {'ventana':<{name_w}}{'n':>5}{'mediana':>{num_w}}{'media':>{num_w}}"
+                  f"{'p90':>{num_w}}{'máx':>{num_w}}  dónde"]
+        for w in sorted(report.gauges):
+            g = report.gauges[w]
+            lines.append(f"  {f'últimas {w} h':<{name_w}}{g.n:>5}{g.median:>{num_w},.1f}"
+                         f"{g.mean:>{num_w},.1f}{g.p90:>{num_w},.1f}{g.max_value:>{num_w},.1f}  {g.max_name}")
 
     lines += ["", "PRECIPITACIÓN MEDIA AREAL (mm, MERGE)"]
     if report.precip:

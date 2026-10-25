@@ -88,6 +88,37 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_pluviometros(args) -> int:
+    import yaml
+    from datetime import datetime, timezone
+
+    cfg = config.load(args.config)
+    ana = ANA(cfg)
+    if not ana.uses_hws:
+        print("hace falta la API nueva de ANA: definí ANA_HWS_USER y ANA_HWS_PASS", file=sys.stderr)
+        return 1
+    if cfg.gauges_path is None:
+        print("falta rain_gauges.file en la configuración", file=sys.stderr)
+        return 1
+    gauges, notes = ana.discover_gauges()
+    for note in notes:
+        print(f"· {note}")
+    by_operator: dict[str, int] = {}
+    for g in gauges:
+        by_operator[g["operator"]] = by_operator.get(g["operator"], 0) + 1
+    print("· por operadora: " + ", ".join(f"{k} {v}" for k, v in sorted(by_operator.items(), key=lambda kv: -kv[1])))
+    if args.dry_run:
+        return 0
+    header = (f"# Pluviómetros telemétricos de ANA en la cuenca del Iguazú.\n"
+              f"# Generado por `iguacu-monitor pluviometros` el "
+              f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC. Se puede editar a mano.\n")
+    body = yaml.safe_dump({"gauges": gauges}, allow_unicode=True, sort_keys=False)
+    cfg.gauges_path.parent.mkdir(parents=True, exist_ok=True)
+    cfg.gauges_path.write_text(header + body, encoding="utf-8")
+    print(f"{len(gauges)} pluviómetros escritos en {cfg.gauges_path}")
+    return 0
+
+
 def cmd_html(args) -> int:
     import pandas as pd
 
@@ -129,6 +160,10 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("report", help="estado actual de la cuenca")
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("pluviometros", help="armar la lista de pluviómetros ANA de la cuenca")
+    p.add_argument("--dry-run", action="store_true", help="mostrar el resultado sin escribir el archivo")
+    p.set_defaults(func=cmd_pluviometros)
 
     p = sub.add_parser("html", help="escribir el panel HTML de la cascada")
     p.add_argument("--out", default="panel/iguacu.html", help="archivo de salida")

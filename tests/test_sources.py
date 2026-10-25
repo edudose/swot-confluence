@@ -182,7 +182,10 @@ def test_hws_rows_parse_into_observations():
     assert got[("hotel_cataratas", "qobs")] == 9120.41
     assert ("hotel_cataratas", "precip") not in got                  # chuva nula
     assert all(o.timestamp == datetime(2026, 10, 25, 0, 0, tzinfo=timezone.utc) for o in obs)
-    assert {o.site for o in obs} == {"porto_capanema", "hotel_cataratas"}
+    # Porto Capanema también tiene pluviómetro: su lluvia va además a la
+    # clave del pluviómetro, y sólo la lluvia.
+    assert {o.site for o in obs} == {"porto_capanema", "hotel_cataratas", "pluv_65987000"}
+    assert {o.variable for o in obs if o.site == "pluv_65987000"} == {"precip"}
 
 
 def test_hws_keeps_quality_status():

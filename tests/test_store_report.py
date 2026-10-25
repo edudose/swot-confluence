@@ -154,3 +154,125 @@ def test_render_text_includes_key_figures():
     assert "11,700" in text      # defluencia de Salto Caxias
     assert "15,120" in text      # caudal en Cataratas
     assert "REGULACIÓN" in text and "PRECIPITACIÓN" in text
+
+
+# ------------------------------------------------- lluvia medida ----------
+from iguacu_monitor.report import gauge_rain
+
+
+def _gauge_obs(code, values_by_hours_ago):
+    return [Observation(source="ana", site=f"pluv_{code}", variable=PRECIP,
+                        timestamp=NOW - timedelta(hours=h), value=v)
+            for h, v in values_by_hours_ago]
+
+
+def _hourly(code, per_hour, hours=30):
+    return _gauge_obs(code, [(h, per_hour) for h in range(hours)])
+
+
+def test_gauge_rain_sums_per_interval_values():
+    obs = []
+    for i in range(10):
+        obs += _hourly(65000000 + i, 1.0)
+    g = gauge_rain(_frame(obs), _cfg())
+    assert g[24].n == 10
+    assert g[24].median == pytest.approx(24.0)
+    assert g[6].median == pytest.approx(6.0)
+
+
+def test_gauge_with_impossible_reading_is_excluded_whole():
+    # Recortar sólo la lectura dejaría un total parcial igual de dudoso.
+    obs = [o for o in _hourly(65000001, 1.0) if o.timestamp != NOW] \
+        + _gauge_obs(65000001, [(0, 250.0)])                       # 250 mm en 1 h
+    for i in range(2, 10):
+        obs += _hourly(65000000 + i, 1.0)
+    g = gauge_rain(_frame(obs), _cfg())
+    assert g[24].n == 8
+    assert g[24].max_value == pytest.approx(24.0)
+    assert g[24].excluded[0][2] == "lluvia por encima de lo físicamente plausible"
+
+
+def test_gauge_rain_excludes_isolated_totals():
+    """Caso real: PCH Lúcia Cherobim reportó 518 mm en 24 h con lecturas de
+    56-60 mm cada 30 min, mientras las vecinas daban 30-110 mm."""
+    obs = []
+    for i, per_hour in enumerate([1.2, 1.5, 1.7, 1.8, 2.0, 2.1, 2.4, 3.0, 4.5]):
+        obs += _hourly(65100000 + i, per_hour)
+    obs += _hourly(65031300, 21.0)          # 504 mm/24 h, bajo el tope de intensidad
+    g = gauge_rain(_frame(obs), _cfg())
+    assert g[24].n == 9
+    assert [(round(t), why) for _, t, why in g[24].excluded] == [(504, "total aislado")]
+    assert g[24].max_value < 120
+
+
+def test_gauge_rain_requires_coverage():
+    obs = []
+    for i in range(10):
+        obs += _hourly(65000000 + i, 1.0)
+    obs += _gauge_obs(65999999, [(0, 1.0), (1, 1.0)])     # sólo 2 de 24 horas
+    g = gauge_rain(_frame(obs), _cfg())
+    assert g[24].n == 10
+
+
+def test_report_includes_gauge_rain_and_flags_exclusions():
+    obs = []
+    for i in range(10):
+        obs += _hourly(65000000 + i, 1.0)
+    obs += _hourly(65031300, 25.0)
+    rep = report.build(_frame(obs), _cfg(), now=NOW)
+    assert rep.gauges[24].n == 10
+    assert any("excluido de la lluvia medida" in n and "total aislado" in n for n in rep.notes)
+    assert "LLUVIA MEDIDA" in report.render_text(rep)
+
+
+def test_local_storm_in_dry_basin_is_not_excluded():
+    """Una tormenta convectiva local es real: no debe tomarse por falla."""
+    obs = []
+    for i in range(12):
+        obs += _hourly(65000000 + i, 0.0)
+    obs += _gauge_obs(65000099, [(h, 0.0) for h in range(30) if h not in (2, 3, 4)]
+                      + [(2, 20.0), (3, 25.0), (4, 10.0)])   # 55 mm en 3 h
+    g = gauge_rain(_frame(obs), _cfg())
+    assert g[24].excluded == []
+    assert g[24].max_value == pytest.approx(55.0)
+
+
+def _quarter_hourly(code, values_by_minutes_ago):
+    return [Observation(source="ana", site=f"pluv_{code}", variable=PRECIP,
+                        timestamp=NOW - timedelta(minutes=m), value=v)
+            for m, v in values_by_minutes_ago]
+
+
+def _base(n=9):
+    obs = []
+    for i in range(n):
+        obs += _hourly(65000000 + i, 1.0)
+    return obs
+
+
+def test_intense_but_real_15min_burst_is_kept():
+    # 30 mm en 15 min es un chaparrón severo, no una falla (tope: 50 mm).
+    burst = _quarter_hourly(65200000, [(m, 0.0) for m in range(0, 30 * 60, 15) if m != 120] + [(120, 30.0)])
+    g = gauge_rain(_frame(_base() + burst), _cfg())
+    assert g[24].excluded == []
+    assert g[24].max_value == pytest.approx(30.0)
+
+
+def test_15min_sensor_spike_is_excluded():
+    """Caso real: PCH Arturo Andreoli registró 98,6 mm en 15 min, con el
+    resto de sus lecturas por debajo de 15 mm."""
+    spike = _quarter_hourly(65963071, [(m, 0.2) for m in range(0, 30 * 60, 15) if m != 120] + [(120, 98.6)])
+    g = gauge_rain(_frame(_base() + spike), _cfg())
+    assert [(n, why) for n, _, why in g[24].excluded] == [
+        ("PCH ARTURO ANDREOLI BARRAMENTO", "lluvia por encima de lo físicamente plausible")]
+
+
+def test_sustained_impossible_rate_is_excluded():
+    """Caso real: PCH Lúcia Cherobim, 56-60 mm cada 30 min durante horas.
+    Cada lectura cabe bajo el tope de 30 min (71 mm), pero 3 h suman ~340."""
+    rows = [(m, 0.0) for m in range(0, 30 * 60, 30)]
+    rows = [(m, 58.0 if 60 <= m <= 360 else v) for m, v in rows]
+    sustained = _quarter_hourly(65031300, rows)
+    g = gauge_rain(_frame(_base() + sustained), _cfg())
+    assert len(g[24].excluded) == 1
+    assert g[24].excluded[0][2] == "lluvia por encima de lo físicamente plausible"

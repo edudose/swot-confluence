@@ -196,3 +196,12 @@ def test_text_is_escaped():
 def test_number_formatting(value, text):
     out = panel.fmt_dec(value) if isinstance(value, float) else panel.fmt_int(value)
     assert out == text
+
+
+@pytest.mark.parametrize("raw,shown", [
+    ("CGH CAVERNOSO BARRAMENTO", "CGH Cavernoso Barramento"),
+    ("UHE GOV. NEY AMINTHAS BARRAMENTO", "UHE Gov. Ney Aminthas Barramento"),
+    ("PCH SÃO LUIZ II", "PCH São Luiz II"),
+])
+def test_station_title_keeps_acronyms(raw, shown):
+    assert panel.station_title(raw) == shown

@@ -36,6 +36,21 @@ class Site:
 
 
 @dataclass
+class Gauge:
+    """Pluviómetro telemétrico de ANA usado para la lluvia medida."""
+
+    code: int
+    name: str
+    operator: str = ""
+    lat: float | None = None
+    lon: float | None = None
+
+    @property
+    def key(self) -> str:
+        return f"pluv_{self.code}"
+
+
+@dataclass
 class Basin:
     name: str
     bbox: tuple[float, float, float, float]
@@ -53,6 +68,9 @@ class Config:
     sources: dict[str, dict[str, Any]]
     store_path: Path
     report: dict[str, Any] = field(default_factory=dict)
+    gauges: list[Gauge] = field(default_factory=list)
+    gauges_path: Path | None = None
+    gauges_opts: dict[str, Any] = field(default_factory=dict)
 
     @property
     def plants(self) -> list[Site]:
@@ -131,10 +149,26 @@ def load(path: str | Path = DEFAULT_CONFIG) -> Config:
         ))
 
     store_path = Path((raw.get("store") or {}).get("path", "data/iguacu.parquet"))
+
+    gauges_opts = raw.get("rain_gauges") or {}
+    gauges_path = Path(gauges_opts["file"]) if gauges_opts.get("file") else None
+    gauges: list[Gauge] = []
+    if gauges_path and gauges_path.exists():
+        listed = yaml.safe_load(gauges_path.read_text(encoding="utf-8")) or {}
+        for g in listed.get("gauges") or []:
+            gauges.append(Gauge(
+                code=int(g["code"]), name=str(g.get("name", "")),
+                operator=str(g.get("operator", "")),
+                lat=_opt_float(g.get("lat")), lon=_opt_float(g.get("lon")),
+            ))
+
     return Config(
         basin=basin,
         sites=sites,
         sources=raw.get("sources") or {},
         store_path=store_path,
         report=raw.get("report") or {},
+        gauges=gauges,
+        gauges_path=gauges_path,
+        gauges_opts=gauges_opts,
     )

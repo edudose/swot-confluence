@@ -55,6 +55,18 @@ def fmt_travel(hours: float | None) -> str:
     return f"≈ {shown} h"
 
 
+ACRONYMS = {"UHE", "PCH", "CGH", "AHE", "UTE", "II", "III", "IV", "PR", "SC", "FDA"}
+
+
+def station_title(name: str) -> str:
+    """'CGH CAVERNOSO BARRAMENTO' -> 'CGH Cavernoso Barramento'."""
+    words = []
+    for word in name.split():
+        bare = word.strip(".,()").upper()
+        words.append(word.upper() if bare in ACRONYMS else word.capitalize())
+    return " ".join(words)
+
+
 def join_names(names: list[str]) -> str:
     if len(names) <= 1:
         return "".join(names)
@@ -376,10 +388,17 @@ def _summary(report: Report) -> str:
     if with_data:
         pills.append(f'<li class="pill"><span class="k">Vierten</span>'
                      f'{len(report.spilling)} de {len(with_data)} usinas</li>')
+    if report.gauges:
+        g = report.gauges.get(24) or report.gauges[max(report.gauges)]
+        short = [f"{w} h {fmt_dec(report.gauges[w].median)}" for w in (1, 6) if w in report.gauges]
+        pills.append(
+            f'<li class="pill"><span class="k">Lluvia medida {g.window_h} h</span>'
+            f'mediana {fmt_dec(g.median)} mm · máx {fmt_dec(g.max_value)} mm '
+            f'({escape(station_title(g.max_name))}) · {" · ".join(short + [f"{g.n} pluviómetros"])}</li>')
     if report.precip:
         bits = [f"{w} d {fmt_dec(report.precip[w])} mm"
                 for w in (1, 3, 7) if w in report.precip]
-        pills.append(f'<li class="pill"><span class="k">Lluvia media areal</span>'
+        pills.append(f'<li class="pill"><span class="k">MERGE media areal</span>'
                      f'{" · ".join(bits)}</li>')
     return f'<ul class="summary">{"".join(pills)}</ul>' if pills else ""
 
@@ -433,7 +452,7 @@ def render(report: Report, cfg: Config, *, note: str | None = None,
   </section>
   <footer class="foot">
     {f"<ul>{notes}</ul>" if notes else ""}
-    <p>Fuentes: COPEL (MHB), ANA, INPE (MERGE), ONS · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>
+    <p>Fuentes: ONS (usinas, horario), ANA (caudal y pluviómetros), INPE MERGE (lluvia diaria) · la lluvia medida es la mediana de los pluviómetros, no una media areal · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>
   </footer>
 </main>'''
 
