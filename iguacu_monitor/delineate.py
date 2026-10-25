@@ -13,11 +13,16 @@ dependencias de esta etapa (rasterio, pysheds), que van en el extra `geo`.
 Modelo de elevación: Copernicus GLO-90 (bucket público en AWS), remuestreado
 a una resolución configurable; 6" (~180 m) alcanza para áreas de miles de km².
 
-ESTADO: la delimitación sobre Copernicus NO pasa la validación contra las
-áreas de drenaje de ANA (-10 % en Capanema, -26 % en União da Vitória). Es
-un modelo de superficie: el dosel de la planicie entre São Mateus do Sul y
-Fluviópolis actúa como dique y desvía el alto Iguazú hacia otra cuenca. El
-siguiente paso es usar direcciones de flujo condicionadas (HydroSHEDS).
+Dos caminos:
+
+* `delineate_fdir` (el que se usa): direcciones de flujo ya condicionadas
+  hidrológicamente (HydroSHEDS v1, 15"), con la red de ríos incorporada. No
+  dependen de rellenar depresiones sobre un modelo de superficie.
+* `delineate` sobre Copernicus: NO pasa la validación contra ANA (-10 % en
+  Capanema, -26 % en União da Vitória). Copernicus es un modelo de
+  superficie: el dosel de la planicie entre São Mateus do Sul y Fluviópolis
+  actúa como dique y desvía el alto Iguazú hacia otra cuenca, y las presas y
+  los espejos de agua cortan la red aguas abajo. Se conserva como referencia.
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ from pathlib import Path
 
 COPERNICUS = ("https://copernicus-dem-90m.s3.amazonaws.com/"
               "Copernicus_DSM_COG_30_{tile}_DEM/Copernicus_DSM_COG_30_{tile}_DEM.tif")
+HYDROSHEDS_DIR_15S = "https://data.hydrosheds.org/file/hydrosheds-v1-dir/hyd_sa_dir_15s.zip"
 EARTH_RADIUS_KM = 6371.0088
 
 
@@ -185,8 +191,100 @@ def to_geojson(labels, transform, outlets: list[Outlet], summary, tolerance_deg:
                 "incremental_km2": round(s["incremental_km2"]),
                 "drainage_km2": round(s["area_km2"]),
                 "drainage_ref_km2": o.area_ref_km2,
+                "drainage_error": (round(s["area_km2"] / o.area_ref_km2 - 1, 4)
+                                   if o.area_ref_km2 else None),
                 "outlet": [round(o.lon, 4), round(o.lat, 4)],
             },
             "geometry": mapping(geom),
         })
     return {"type": "FeatureCollection", "features": features}
+
+
+# ------------------------------------------------- direcciones condicionadas
+def crop_raster(src_path: Path, bbox, out: Path) -> Path:
+    """Recorta un raster a la caja y lo escribe como GeoTIFF."""
+    import rasterio
+    from rasterio.windows import from_bounds
+
+    with rasterio.open(src_path) as src:
+        window = from_bounds(*bbox, src.transform).round_offsets().round_lengths()
+        data = src.read(1, window=window)
+        profile = src.profile.copy()
+        profile.update(driver="GTiff", height=data.shape[0], width=data.shape[1],
+                       transform=src.window_transform(window), compress="deflate")
+        profile.pop("blockxsize", None)
+        profile.pop("blockysize", None)
+        profile["tiled"] = False
+    with rasterio.open(out, "w", **profile) as dst:
+        dst.write(data, 1)
+    return out
+
+
+def snap_to_main_stem(up_km2, transform, lon: float, lat: float, area_ref_km2: float | None,
+                      min_frac: float = 0.5, max_radius_deg: float = 0.15):
+    """Celda del cauce principal más cercana al punto.
+
+    "Cauce principal" = celdas que drenan al menos `min_frac` del área de
+    referencia. Se elige la MÁS CERCANA, no la de área más parecida: así la
+    comparación posterior contra el área oficial sigue siendo una prueba y
+    no queda forzada por el propio ajuste.
+    """
+    import numpy as np
+
+    threshold = (area_ref_km2 or 0) * min_frac
+    col0 = (lon - transform.c) / transform.a
+    row0 = (lat - transform.f) / transform.e
+    radius = int(math.ceil(max_radius_deg / abs(transform.a)))
+    r0, r1 = max(int(row0) - radius, 0), min(int(row0) + radius + 1, up_km2.shape[0])
+    c0, c1 = max(int(col0) - radius, 0), min(int(col0) + radius + 1, up_km2.shape[1])
+    window = up_km2[r0:r1, c0:c1]
+    rows, cols = np.where(window >= threshold)
+    if rows.size == 0:
+        raise ValueError(f"sin cauce con >= {threshold:,.0f} km² a menos de {max_radius_deg}° de ({lon}, {lat})")
+    rows, cols = rows + r0, cols + c0
+    dist = np.hypot(rows + 0.5 - row0, cols + 0.5 - col0)
+    k = int(np.argmin(dist))
+    row, col = int(rows[k]), int(cols[k])
+    x = transform.c + (col + 0.5) * transform.a
+    y = transform.f + (row + 0.5) * transform.e
+    km = float(dist[k]) * abs(transform.a) * 111.32
+    return x, y, km, row, col
+
+
+def delineate_fdir(fdir_path: Path, outlets: list[Outlet], min_frac: float = 0.5):
+    """Áreas incrementales a partir de direcciones de flujo D8 ya condicionadas.
+
+    Devuelve (etiquetas, transform, resumen). Mismo criterio de etiquetado que
+    `delineate`: cada celda queda con el punto más aguas arriba que la drena.
+    """
+    import numpy as np
+
+    if not hasattr(np, "in1d"):          # pysheds con numpy 2
+        np.in1d = np.isin
+    from pysheds.grid import Grid
+
+    grid = Grid.from_raster(str(fdir_path))
+    fdir = grid.read_raster(str(fdir_path))
+    acc = grid.accumulation(fdir)
+    rows_area = cell_area_km2(grid.affine, acc.shape[0])
+    up_km2 = np.asarray(acc, dtype="float64") * rows_area[:, None]
+
+    order = sorted(range(len(outlets)), key=lambda i: outlets[i].area_ref_km2 or 0, reverse=True)
+    labels = np.zeros(acc.shape, dtype=np.int16)
+    summary = []
+    for i in order:
+        o = outlets[i]
+        x, y, km, row, col = snap_to_main_stem(up_km2, grid.affine, o.lon, o.lat,
+                                               o.area_ref_km2, min_frac)
+        # Por índice y no por coordenada: con el centro exacto de la celda,
+        # pysheds puede redondear a la vecina y trazar un arroyo lateral.
+        catch = np.asarray(grid.catchment(x=col, y=row, fdir=fdir, xytype="index"), dtype=bool)
+        total = float((catch * rows_area[:, None]).sum())
+        labels[catch] = i + 1
+        summary.append({"key": o.key, "snapped": (x, y), "snap_km": km,
+                        "area_km2": total, "area_ref_km2": o.area_ref_km2})
+    for i, o in enumerate(outlets):
+        incr = float(((labels == i + 1) * rows_area[:, None]).sum())
+        next(s for s in summary if s["key"] == o.key)["incremental_km2"] = incr
+    summary.sort(key=lambda s: s["area_km2"])
+    return labels, grid.affine, summary

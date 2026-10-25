@@ -218,6 +218,136 @@ def station_card(state: SiteState, band: float, tz: timezone, series_class: str)
 </article>'''
 
 
+# --------------------------------------------------------- lluvia por subcuenca
+# Rampa azul validada (pasos 700 -> 100). En fondo oscuro el ancla se invierte:
+# lo seco queda cerca del fondo y lo lluvioso brilla.
+RAIN_BREAKS = (10, 25, 50, 75, 100, 150)              # mm, límites de clase
+RAIN_RAMP = ("#0d366b", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb")
+
+
+def rain_color(mm: float | None) -> str:
+    if mm is None:
+        return "var(--panel-hi)"
+    for i, edge in enumerate(RAIN_BREAKS):
+        if mm < edge:
+            return RAIN_RAMP[i]
+    return RAIN_RAMP[-1]
+
+
+def _project(cfg_bounds, width: float = 1000.0, pad: float = 14.0):
+    """Equirectangular con escala cos(lat) centrada en la cuenca."""
+    import math
+
+    minx, miny, maxx, maxy = cfg_bounds
+    k = math.cos(math.radians((miny + maxy) / 2))
+    scale = (width - 2 * pad) / ((maxx - minx) * k)
+    height = (maxy - miny) * scale + 2 * pad
+
+    def xy(lon: float, lat: float) -> tuple[float, float]:
+        return (round(pad + (lon - minx) * k * scale, 1), round(pad + (maxy - lat) * scale, 1))
+    return xy, round(height)
+
+
+def _path(geom, xy) -> str:
+    polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
+    parts = []
+    for poly in polys:
+        for ring in [poly.exterior, *poly.interiors]:
+            pts = [xy(x, y) for x, y in ring.coords]
+            parts.append("M" + " L".join(f"{x},{y}" for x, y in pts) + " Z")
+    return " ".join(parts)
+
+
+def rain_section(report: Report, cfg: Config, window: int = 24) -> str:
+    from iguacu_monitor import subbasins
+
+    if not report.subbasins or not cfg.subbasins_path:
+        return ""
+    subs = {s.id: s for s in subbasins.load(cfg.subbasins_path)}
+    if not subs:
+        return ""
+    contour = subbasins.outline(list(subs.values()))
+    xy, height = _project(contour.bounds)
+
+    shapes, labels = [], []
+    for sb in report.subbasins:
+        geom = subs[sb.id].geom.simplify(0.008, preserve_topology=True)
+        mm = sb.gauge_mm.get(window)
+        bits = [f"{w} h {fmt_dec(sb.gauge_mm[w])} mm" for w in sorted(sb.gauge_mm)]
+        tip = (f"{sb.order}. {sb.name} · área incremental {fmt_int(sb.area_km2)} km² · "
+               + " · ".join(bits) + f" · {sb.n_gauges} pluviómetros con dato")
+        shapes.append(f'<path class="sb" d="{_path(geom, xy)}" fill="{rain_color(mm)}" '
+                      f'fill-rule="evenodd"><title>{escape(tip)}</title></path>')
+        pt = subs[sb.id].geom.representative_point()
+        lx, ly = xy(pt.x, pt.y)
+        labels.append(f'<text class="ord-label" x="{lx}" y="{ly + 8}">{sb.order}</text>')
+
+    gauges = [f'<circle class="gauge" cx="{x}" cy="{y}" r="3.2"/>'
+              for x, y in (xy(g.lon, g.lat) for g in cfg.gauges
+                           if g.lon is not None and contour.buffer(0.02).contains(_point(g.lon, g.lat)))]
+    outlets = []
+    for key in cfg.subbasins_opts.get("outlets") or []:
+        site = cfg.site(key)
+        if site.lon is None:
+            continue
+        x, y = xy(site.lon, site.lat)
+        outlets.append(f'<rect class="outlet" x="{x - 6}" y="{y - 6}" width="12" height="12" '
+                       f'transform="rotate(45 {x} {y})"><title>{escape(site.label)}</title></rect>')
+
+    swatches = "".join(f'<span class="sw" style="background:{c}"></span>' for c in RAIN_RAMP)
+    ticks = "".join(f"<span>{t}</span>" for t in ("0", *map(str, RAIN_BREAKS)))
+    legend = f'''<ul class="legend" aria-label="Escala de lluvia en {window} h, en milímetros">
+  <li><div class="ramp">{swatches}</div><div class="ticks">{ticks}</div></li>
+  <li>mm en {window} h</li>
+  <li class="sym"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.5" fill="currentColor"/></svg>pluviómetro</li>
+  <li class="sym"><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" transform="rotate(45 6 6)" fill="currentColor"/></svg>punto de control</li>
+</ul>'''
+
+    windows = sorted({w for sb in report.subbasins for w in sb.gauge_mm})
+    head = "".join(f"<th>{w} h</th>" for w in windows)
+    rows = []
+    without = [sb.name for sb in report.subbasins if sb.n_gauges == 0]
+    for sb in report.subbasins:
+        cells = []
+        for w in windows:
+            v = sb.gauge_mm.get(w)
+            cls = ' class="hl"' if w == window else ""
+            cells.append(f"<td{cls}>{fmt_dec(v) if v is not None else '—'}</td>")
+        m1 = sb.merge_mm.get(1)
+        n_cls = ' class="dim"' if sb.n_gauges == 0 else ""
+        rows.append(
+            f"<tr><td>{sb.order}</td>"
+            f'<td><span class="chip-sw" style="background:{rain_color(sb.gauge_mm.get(window))}"></span>'
+            f"{escape(sb.name)}</td>"
+            f"<td class=\"dim\">{fmt_int(sb.area_km2)}</td><td{n_cls}>{sb.n_gauges}</td>"
+            + "".join(cells)
+            + f"<td class=\"dim\">{fmt_dec(m1) if m1 is not None else '—'}</td></tr>")
+    note = (f"{escape(join_names(without))} no {'tiene' if len(without) == 1 else 'tienen'} "
+            f"pluviómetros dentro: su valor sale de interpolar los vecinos. " if without else "")
+    return f'''<section class="rain" aria-label="Lluvia por subcuenca">
+  <div class="map-card">
+    <div><h2>Lluvia por subcuenca · {window} h</h2>
+      <p class="lede">Áreas incrementales de la cascada, de la cabecera a Cataratas. Pluviómetros ANA interpolados (IDW).</p></div>
+    <svg class="map" viewBox="0 0 1000 {height}" role="img" aria-label="Mapa de lluvia en {window} horas por subcuenca">
+      {"".join(shapes)}{"".join(gauges)}{"".join(outlets)}{"".join(labels)}
+    </svg>
+    {legend}
+  </div>
+  <div class="tbl-card">
+    <div class="tbl-wrap"><table class="sbt">
+      <thead><tr><th>#</th><th>Área incremental</th><th>km²</th><th>pluv.</th>{head}<th>MERGE 1 d</th></tr></thead>
+      <tbody>{"".join(rows)}</tbody>
+    </table></div>
+    <p class="tbl-note">Valores en mm. {note}"pluv." cuenta los pluviómetros con dato en 24 h. MERGE: lámina diaria satelital-pluviométrica de INPE, de 12 a 12 UTC, con rezago. Subcuencas delimitadas con HydroSHEDS y validadas contra las áreas de drenaje de ANA (error ≤ 0,2 %).</p>
+  </div>
+</section>'''
+
+
+def _point(lon: float, lat: float):
+    from shapely.geometry import Point
+    return Point(lon, lat)
+
+
 # -------------------------------------------------------------------- página
 CSS = """
 /* Sala de control: azul profundo de agua; el estado (ámbar, rojo) es el
@@ -329,6 +459,44 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--fo
 .spark .line { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
 .spark .end { stroke: currentColor; stroke-width: 6; stroke-linecap: round; }
 .spark-empty { border-top: 1px dashed var(--line); height: 0; margin-top: 21px; }
+
+/* Lluvia por subcuenca: rampa azul de una sola tinta, ancla invertida para
+   el fondo oscuro (lo seco se funde con el panel, lo lluvioso brilla). */
+.rain { display: grid; gap: 12px; grid-template-columns: 1fr; align-items: start; }
+.rain h2 { margin: 0; font-family: var(--font-num); font-weight: 700; font-size: 1.05rem;
+  letter-spacing: 0.09em; text-transform: uppercase; }
+.rain .lede { margin: 2px 0 0; color: var(--muted); font-size: 0.88rem; }
+.map-card, .tbl-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px; min-width: 0; display: grid; gap: 10px; }
+.map { display: block; width: 100%; height: auto; }
+.map .sb { stroke: var(--bg); stroke-width: 2; stroke-linejoin: round; }
+.map .sb:hover { stroke: var(--fg); }
+.map .outlet { fill: var(--fg); stroke: var(--bg); stroke-width: 2; }
+.map .gauge { fill: var(--fg); fill-opacity: 0.85; stroke: var(--bg); stroke-width: 1.5; }
+.map .ord-label { font-family: var(--font-num); font-weight: 700; font-size: 24px; fill: var(--bg);
+  paint-order: stroke; stroke: var(--fg); stroke-width: 5px; stroke-linejoin: round; text-anchor: middle; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin: 0; padding: 0;
+  list-style: none; color: var(--muted); font-size: 0.82rem; }
+.legend .ramp { display: flex; gap: 2px; align-items: center; }
+.legend .sw { width: 26px; height: 12px; border-radius: 2px; }
+.legend .ticks { display: flex; gap: 2px; font-variant-numeric: tabular-nums; }
+.legend .ticks span { width: 26px; text-align: left; font-size: 0.72rem; }
+.legend .sym { display: inline-flex; align-items: center; gap: 6px; }
+.legend svg { width: 12px; height: 12px; }
+.tbl-wrap { overflow-x: auto; }
+table.sbt { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+.sbt th { text-align: right; color: var(--muted); font-weight: 500; font-size: 0.8rem; padding: 4px 6px;
+  border-bottom: 1px solid var(--line); white-space: nowrap; }
+.sbt th:first-child, .sbt td:first-child, .sbt th:nth-child(2), .sbt td:nth-child(2) { text-align: left; }
+.sbt td { text-align: right; padding: 5px 6px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  font-family: var(--font-num); font-weight: 600; }
+.sbt td:nth-child(2) { font-family: var(--font-ui); font-weight: 500; }
+.sbt td.hl { color: var(--fg); }
+.sbt td.dim, .sbt td .dim { color: var(--muted); font-weight: 500; }
+.sbt .chip-sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.sbt tr:last-child td { border-bottom: 0; }
+.tbl-note { margin: 0; color: var(--muted); font-size: 0.8rem; }
+@media (min-width: 1100px) { .rain { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); } }
 
 .foot { display: grid; gap: 6px; color: var(--muted); font-size: 0.85rem; }
 .foot ul { margin: 0; padding-left: 1.1em; display: grid; gap: 2px; }
@@ -450,9 +618,10 @@ def render(report: Report, cfg: Config, *, note: str | None = None,
   <section class="cascade" aria-label="Cascada del Iguazú, de aguas arriba hacia aguas abajo">
 {chr(10).join(cards)}
   </section>
+  {rain_section(report, cfg)}
   <footer class="foot">
     {f"<ul>{notes}</ul>" if notes else ""}
-    <p>Fuentes: ONS (usinas, horario), ANA (caudal y pluviómetros), INPE MERGE (lluvia diaria) · la lluvia medida es la mediana de los pluviómetros, no una media areal · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>
+    <p>Fuentes: ONS (usinas, horario), ANA (caudal y pluviómetros), INPE MERGE (lluvia diaria), HydroSHEDS (subcuencas; Lehner et al., 2008) · la lluvia medida de la cabecera es la mediana de los pluviómetros, no una media areal · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>
   </footer>
 </main>'''
 

@@ -119,6 +119,71 @@ def cmd_pluviometros(args) -> int:
     return 0
 
 
+def cmd_subcuencas(args) -> int:
+    """Delimita las áreas incrementales y escribe el GeoJSON versionado."""
+    import io
+    import json
+    import tempfile
+    import zipfile
+    from pathlib import Path
+
+    from iguacu_monitor import delineate, http
+
+    cfg = config.load(args.config)
+    opts = cfg.subbasins_opts
+    if not opts.get("file") or not opts.get("outlets"):
+        print("falta la sección subbasins (file, outlets) en la configuración", file=sys.stderr)
+        return 1
+    outlets = []
+    for key in opts["outlets"]:
+        site = cfg.site(key)
+        if site.lat is None or site.lon is None:
+            print(f"{key}: faltan lat/lon en la configuración", file=sys.stderr)
+            return 1
+        outlets.append(delineate.Outlet(key, site.label, site.lon, site.lat, site.drainage_km2))
+
+    work = Path(args.workdir or tempfile.mkdtemp(prefix="hydrosheds_"))
+    work.mkdir(parents=True, exist_ok=True)
+    tif = work / "hyd_sa_dir_15s.tif"
+    if not tif.exists():
+        print("bajando direcciones de flujo de HydroSHEDS…")
+        resp = http.get(opts.get("fdir_url", delineate.HYDROSHEDS_DIR_15S), timeout=900)
+        resp.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            member = next(n for n in zf.namelist() if n.lower().endswith(".tif"))
+            tif.write_bytes(zf.read(member))
+    bbox = tuple(opts.get("dem_bbox", (-55.0, -27.0, -48.0, -24.0)))
+    crop = delineate.crop_raster(tif, bbox, work / "dir_crop.tif")
+    labels, transform, summary = delineate.delineate_fdir(
+        crop, outlets, float(opts.get("snap_min_frac", 0.5)))
+
+    worst = 0.0
+    print(f"\n{'punto':20}{'drenaje':>10}{'ANA':>10}{'dif':>8}{'incremental':>13}{'ajuste':>9}")
+    for s in summary:
+        ref = s["area_ref_km2"]
+        dif = s["area_km2"] / ref - 1 if ref else float("nan")
+        worst = max(worst, abs(dif)) if ref else worst
+        print(f"{s['key']:20}{s['area_km2']:>10,.0f}{(ref or 0):>10,.0f}{dif * 100:>+7.1f}%"
+              f"{s['incremental_km2']:>13,.0f}{s['snap_km']:>7.1f}km")
+    limit = float(opts.get("max_area_error", 0.02))
+    if worst > limit:
+        print(f"\nla validación no cierra: error máximo {worst:.1%} > {limit:.0%}; no se escribe la capa",
+              file=sys.stderr)
+        return 1
+
+    gj = delineate.to_geojson(labels, transform, outlets, summary, tolerance_deg=0.005)
+    gj["metadata"] = {
+        "source": "HydroSHEDS v1, direcciones de flujo 15\" (Lehner et al., 2008)",
+        "method": "áreas incrementales por punto de control; ajuste al cauce principal más cercano",
+        "max_area_error_vs_ana": round(worst, 4),
+    }
+    out = cfg.subbasins_path
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(gj, ensure_ascii=False), encoding="utf-8")
+    print(f"\n{len(gj['features'])} subcuencas escritas en {out} (error máximo contra ANA {worst:.2%})")
+    return 0
+
+
 def cmd_html(args) -> int:
     import pandas as pd
 
@@ -164,6 +229,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("pluviometros", help="armar la lista de pluviómetros ANA de la cuenca")
     p.add_argument("--dry-run", action="store_true", help="mostrar el resultado sin escribir el archivo")
     p.set_defaults(func=cmd_pluviometros)
+
+    p = sub.add_parser("subcuencas", help="delimitar las áreas incrementales por punto de control")
+    p.add_argument("--workdir", help="directorio para los rasters intermedios (se reutiliza)")
+    p.set_defaults(func=cmd_subcuencas)
 
     p = sub.add_parser("html", help="escribir el panel HTML de la cascada")
     p.add_argument("--out", default="panel/iguacu.html", help="archivo de salida")

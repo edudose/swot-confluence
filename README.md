@@ -29,6 +29,8 @@ iguacu-monitor fetch --days 7        # descargar y acumular
 iguacu-monitor report                # estado de la cuenca
 iguacu-monitor html                  # panel HTML de la cascada
 iguacu-monitor html --demo           # el panel con datos de ejemplo, sin red
+iguacu-monitor pluviometros          # rearmar la lista de pluviómetros ANA (API nueva)
+iguacu-monitor subcuencas            # volver a delimitar las subcuencas (extra [geo])
 ```
 
 El panel sigue la lógica del tablero operativo: una tarjeta por usina de
@@ -43,6 +45,64 @@ Para dejarlo corriendo solo, basta un cron horario con `fetch`:
 ```cron
 17 * * * * cd /ruta/al/repo && iguacu-monitor fetch --days 2 >> logs/fetch.log 2>&1
 ```
+
+## Subcuencas
+
+La lluvia se resume también por **área incremental de la cascada**: lo que
+drena a cada punto de control descontando lo que drena al anterior. Es la
+división que sirve para leer la operación, porque la lluvia sobre el área de
+una usina le llega como aporte lateral sin pasar por la anterior.
+
+`config/subcuencas_iguacu.geojson` se generó con `iguacu-monitor subcuencas`
+a partir de las direcciones de flujo condicionadas de HydroSHEDS v1 (15",
+~450 m). Cada punto se ajusta a la celda más cercana del cauce principal
+(la que drena al menos la mitad del área oficial) y recién después se compara
+el área obtenida con la de ANA, así el ajuste no fuerza la validación:
+
+| punto | drenaje (km²) | ANA (km²) | error | incremental (km²) |
+|---|---:|---:|---:|---:|
+| União da Vitória | 24.208 | 24.200 | +0,0 % | 24.208 |
+| Foz do Areia | 30.144 | 30.100 | +0,1 % | 5.936 |
+| Segredo | 34.364 | 34.400 | −0,1 % | 4.219 |
+| Salto Santiago | 43.903 | 43.900 | +0,0 % | 9.539 |
+| Salto Osório | 45.857 | 45.800 | +0,1 % | 1.954 |
+| Salto Caxias | 57.095 | 57.100 | −0,0 % | 11.239 |
+| Baixo Iguaçu | 61.709 | 61.580 | +0,2 % | 4.613 |
+| Porto Capanema | 63.964 | 63.900 | +0,1 % | 2.255 |
+| Hotel Cataratas | 67.223 | 67.100 | +0,2 % | 3.259 |
+
+El comando falla si algún punto se aparta más de 2 % y entonces no escribe
+la capa.
+
+Primero se intentó con Copernicus GLO-90 y no sirvió: al ser un modelo de
+superficie, el dosel de la planicie entre São Mateus do Sul y Fluviópolis y
+los espejos de los embalses desvían la red (−10 % a −26 % de área). El código
+de ese intento queda en `delineate.py` como referencia.
+
+La capa se puede reemplazar por otra (p. ej. las subcuencas de un modelo HMS,
+o una delimitación con MERIT Hydro) con un polígono por subcuenca y
+propiedades `id` y `name`.
+
+Por subcuenca se calcula:
+
+- **Lluvia de los pluviómetros** en 6, 24 y 72 h, interpolada por distancia
+  inversa a una grilla de 0,05° y promediada por polígono, ponderando por
+  área de celda. La columna "pluv." cuenta los pluviómetros con dato dentro
+  de cada área; con cero, el valor es una extrapolación de los vecinos.
+- **Lámina diaria de MERGE**, promediando las celdas de 0,1° del polígono. La
+  media de toda la cuenca usa ahora el contorno real y no la caja envolvente.
+
+## Licencias de los datos
+
+- **HydroSHEDS** (subcuencas): citar Lehner, B., Verdin, K., Jarvis, A.
+  (2008), *New global hydrography derived from spaceborne elevation data*,
+  Eos 89(10). Rige el acuerdo de licencia incluido en la descarga.
+- **MERIT Hydro**, si se usa para regenerar las subcuencas: CC BY-NC 4.0 u
+  ODbL 1.0 a elección (el autor confirmó la doble licencia). Para uso
+  operativo corresponde ODbL: citar Yamazaki et al. (2019), *MERIT Hydro*,
+  WRR 55, y compartir bajo ODbL las capas derivadas que se publiquen. Los
+  mosaicos originales no se redistribuyen.
+- ANA, ONS e INPE: datos públicos; citar la fuente.
 
 ## Fuentes y estado de verificación
 

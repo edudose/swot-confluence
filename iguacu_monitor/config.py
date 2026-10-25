@@ -29,6 +29,9 @@ class Site:
     attention: float | None = None # umbral de atención sobre el afluente [m3/s]
     alert: float | None = None     # umbral de alerta sobre el afluente [m3/s]
     travel_h: float | None = None  # tiempo de viaje desde el punto anterior [h]
+    lat: float | None = None
+    lon: float | None = None
+    drainage_km2: float | None = None  # área de drenaje oficial (ANA)
 
     @property
     def label(self) -> str:
@@ -71,6 +74,12 @@ class Config:
     gauges: list[Gauge] = field(default_factory=list)
     gauges_path: Path | None = None
     gauges_opts: dict[str, Any] = field(default_factory=dict)
+    subbasins_opts: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def subbasins_path(self) -> Path | None:
+        f = self.subbasins_opts.get("file")
+        return Path(f) if f else None
 
     @property
     def plants(self) -> list[Site]:
@@ -129,6 +138,8 @@ def load(path: str | Path = DEFAULT_CONFIG) -> Config:
             attention=_opt_float(p.get("attention")),
             alert=_opt_float(p.get("alert")),
             travel_h=_opt_float(p.get("travel_h")),
+            lat=_opt_float(p.get("lat")), lon=_opt_float(p.get("lon")),
+            drainage_km2=_opt_float(p.get("drainage_km2")),
         ))
         site = sites[-1]
         if site.operation not in {"caudal", "nivel"}:
@@ -146,6 +157,8 @@ def load(path: str | Path = DEFAULT_CONFIG) -> Config:
             role=s.get("role", ""), river=s.get("river", ""),
             short=s.get("short", ""),
             travel_h=_opt_float(s.get("travel_h")),
+            lat=_opt_float(s.get("lat")), lon=_opt_float(s.get("lon")),
+            drainage_km2=_opt_float(s.get("drainage_km2")),
         ))
 
     store_path = Path((raw.get("store") or {}).get("path", "data/iguacu.parquet"))
@@ -171,4 +184,5 @@ def load(path: str | Path = DEFAULT_CONFIG) -> Config:
         gauges=gauges,
         gauges_path=gauges_path,
         gauges_opts=gauges_opts,
+        subbasins_opts=raw.get("subbasins") or {},
     )

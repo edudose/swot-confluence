@@ -168,8 +168,14 @@ subbasins:
   file: config/subcuencas_iguacu.geojson
   outlets: [uniao_da_vitoria, foz_do_areia, segredo, salto_santiago, salto_osorio,
             salto_caxias, baixo_iguacu, porto_capanema, hotel_cataratas]
-  dem_res_deg: 0.0016667   # 6" (~180 m)
-  snap_min_km2: 10000      # ajustar cada punto al cauce principal
+  # Direcciones de flujo condicionadas de HydroSHEDS v1 (15", ~450 m). Cada
+  # punto se ajusta a la celda más cercana que drena al menos `snap_min_frac`
+  # de su área oficial, y recién después se compara el área obtenida con la
+  # de ANA: el ajuste no fuerza el resultado de la validación.
+  fdir_url: https://data.hydrosheds.org/file/hydrosheds-v1-dir/hyd_sa_dir_15s.zip
+  dem_bbox: [-55.0, -27.0, -48.0, -24.0]
+  snap_min_frac: 0.5
+  max_area_error: 0.02     # el comando falla si algún punto se aparta más de 2 %
 
 # ---------------------------------------------------------------------------
 # Lluvia medida: pluviómetros telemétricos de ANA dentro de la cuenca
@@ -209,6 +215,9 @@ report:
   # rachas imposibles sin descartar un chaparrón intenso pero real.
   gauge_max_1h_mm: 100
   gauge_outlier_z: 6             # z robusto (mediana/MAD) para excluir un total aislado
+  # Lluvia por subcuenca: pluviómetros interpolados (IDW) a esta grilla.
+  subbasin_windows_h: [6, 24, 72]
+  subbasin_grid_deg: 0.05
 
 # ---------------------------------------------------------------------------
 # Fuentes

@@ -129,8 +129,10 @@ class GaugeRain:
     excluded: list[tuple[str, float, str]] = field(default_factory=list)
 
 
-def gauge_rain(frame, cfg: Config) -> dict[int, GaugeRain]:
-    """Totales por ventana de los pluviómetros, con control de calidad.
+def gauge_window_totals(frame, cfg: Config) -> dict[int, tuple["object", list]]:
+    """Totales por pluviómetro y ventana, ya filtrados por control de calidad.
+
+    Devuelve {ventana_h: (Serie sitio->total mm, excluidos)}.
 
     1. Un pluviómetro que supera la envolvente plausible en alguna lectura
        o en las sumas móviles de 1 h y 3 h queda fuera de esa ventana:
@@ -152,12 +154,12 @@ def gauge_rain(frame, cfg: Config) -> dict[int, GaugeRain]:
     def envelope(hours: float) -> float:
         return max_1h * hours ** 0.5
     z_cut = float(opts.get("gauge_outlier_z", 6))
-    names = {g.key: g.name for g in cfg.gauges}
 
     rain = frame[frame["site"].astype(str).str.startswith("pluv_") & (frame["variable"] == PRECIP)]
     if rain.empty:
         return {}
     rain = rain.sort_values(["site", "timestamp"])
+    names = {g.key: g.name for g in cfg.gauges}
     step_h = (rain.groupby("site")["timestamp"]
                   .apply(lambda s: s.diff().median().total_seconds() / 3600 if len(s) > 1 else np.nan))
     rain = rain.assign(step_h=rain["site"].map(step_h))
@@ -200,6 +202,25 @@ def gauge_rain(frame, cfg: Config) -> dict[int, GaugeRain]:
                 excluded.append((names.get(site, site), float(totals[site]), "total aislado"))
             totals = totals[z <= z_cut]
 
+        out[window] = (totals, excluded)
+    return out
+
+
+def gauge_rain(frame, cfg: Config, outside: set[str] | None = None,
+               totals_by_window=None) -> dict[int, GaugeRain]:
+    """Estadísticas por ventana de la lluvia medida.
+
+    `outside` son los pluviómetros que se sabe que quedan fuera de la cuenca:
+    sirven para interpolar en los bordes, no para el resumen.
+    """
+    names = {g.key: g.name for g in cfg.gauges}
+    per_window = totals_by_window if totals_by_window is not None else gauge_window_totals(frame, cfg)
+    out: dict[int, GaugeRain] = {}
+    for window, (totals, excluded) in per_window.items():
+        if outside:
+            totals = totals[~totals.index.isin(outside)]
+        if totals.empty:
+            continue
         top = totals.idxmax()
         out[window] = GaugeRain(
             window_h=window, n=int(len(totals)),
@@ -212,6 +233,89 @@ def gauge_rain(frame, cfg: Config) -> dict[int, GaugeRain]:
 
 
 @dataclass
+class SubBasinRain:
+    """Lluvia sobre un área incremental de la cascada."""
+
+    id: str
+    name: str
+    order: int
+    area_km2: float
+    n_gauges: int                                          # pluviómetros dentro
+    gauge_mm: dict[int, float] = field(default_factory=dict)   # IDW, por ventana en h
+    merge_mm: dict[int, float] = field(default_factory=dict)   # MERGE, por días
+
+
+def subbasin_rain(frame, cfg: Config, now: datetime, totals_by_window) -> tuple[list[SubBasinRain], set[str]]:
+    """Lluvia por subcuenca: pluviómetros interpolados (IDW) y MERGE.
+
+    Devuelve (subcuencas, claves de pluviómetros que quedan fuera de la cuenca). Los
+    pluviómetros se interpolan a una grilla de `subbasin_grid_deg` y se
+    promedian por polígono, ponderando por área de celda; los que caen hasta
+    ~10 km fuera del contorno entran en la interpolación para no subestimar
+    los bordes. Sin capa de subcuencas devuelve listas vacías.
+    """
+    import numpy as np
+    import pandas as pd
+    from shapely import contains_xy
+
+    from iguacu_monitor import subbasins
+
+    subs = subbasins.load(cfg.subbasins_path) if cfg.subbasins_path else []
+    if not subs:
+        return [], set()
+    opts = cfg.report
+    windows = [int(w) for w in opts.get("subbasin_windows_h", (6, 24, 72))]
+    step = float(opts.get("subbasin_grid_deg", 0.05))
+
+    contour = subbasins.outline(subs)
+    near = contour.buffer(0.1)
+    snug = contour.buffer(0.02)
+    coords = {g.key: (g.lon, g.lat) for g in cfg.gauges if g.lon is not None and g.lat is not None}
+    near_keys = {k for k, (x, y) in coords.items() if contains_xy(near, x, y)}
+    inside_keys = {k for k, (x, y) in coords.items() if contains_xy(snug, x, y)}
+
+    minx, miny, maxx, maxy = contour.bounds
+    lons = np.arange(minx + step / 2, maxx, step)
+    lats = np.arange(miny + step / 2, maxy, step)
+    masks = subbasins.grid_masks(lons, lats, subs)
+    weights = np.cos(np.radians(lats))[:, None] * np.ones((1, len(lons)))
+
+    # Pluviómetros con dato válido en 24 h (o en la ventana más larga) dentro
+    # de cada subcuenca: es la medida de confianza del valor interpolado.
+    ref_w = 24 if 24 in totals_by_window else (max(totals_by_window) if totals_by_window else None)
+    with_data = set(totals_by_window[ref_w][0].index) if ref_w is not None else set()
+    results = {s.id: SubBasinRain(id=s.id, name=s.name, order=s.order, area_km2=s.area_km2,
+                                  n_gauges=sum(1 for k in inside_keys & with_data
+                                               if contains_xy(s.geom, *coords[k])))
+               for s in subs}
+
+    for w in windows:
+        if w not in totals_by_window:
+            continue
+        totals = totals_by_window[w][0]
+        totals = totals[totals.index.isin(near_keys)]
+        if len(totals) < 3:
+            continue
+        gx = [coords[k][0] for k in totals.index]
+        gy = [coords[k][1] for k in totals.index]
+        grid = subbasins.idw_grid(gx, gy, totals.values, lons, lats)
+        for s in subs:
+            m = masks[s.id]
+            if m.any():
+                results[s.id].gauge_mm[w] = float((grid[m] * weights[m]).sum() / weights[m].sum())
+
+    rain = frame[frame["variable"] == PRECIP]
+    for s in subs:
+        sel = rain[rain["site"] == s.key]
+        for days in (1, 3):
+            part = sel[sel["timestamp"] >= now - timedelta(days=days)]
+            if not part.empty:
+                results[s.id].merge_mm[days] = float(part["value"].sum())
+
+    return [results[s.id] for s in subs], set(coords) - inside_keys
+
+
+@dataclass
 class Report:
     generated: datetime
     basin: str
@@ -219,6 +323,7 @@ class Report:
     precip: dict[int, float]
     notes: list[str] = field(default_factory=list)
     gauges: dict[int, GaugeRain] = field(default_factory=dict)
+    subbasins: list[SubBasinRain] = field(default_factory=list)
 
     @property
     def plants(self) -> list[SiteState]:
@@ -340,7 +445,9 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
         if state.stale and state.last_seen is not None:
             notes.append(f"{state.name}: último dato hace {state.age_hours:.0f} h")
 
-    gauges = gauge_rain(frame, cfg)
+    totals_by_window = gauge_window_totals(frame, cfg)
+    subs, outside = subbasin_rain(frame, cfg, now, totals_by_window)
+    gauges = gauge_rain(frame, cfg, outside=outside, totals_by_window=totals_by_window)
     flagged: dict[str, tuple[int, float, str]] = {}
     for w in sorted(gauges):
         for name, total, reason in gauges[w].excluded:
@@ -350,7 +457,7 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
                      f"({reason}; {total:,.0f} mm en {w} h)")
 
     return Report(generated=now, basin=cfg.basin.name, sites=states,
-                  precip=precip, notes=notes, gauges=gauges)
+                  precip=precip, notes=notes, gauges=gauges, subbasins=subs)
 
 
 def render_text(report: Report) -> str:
@@ -393,6 +500,17 @@ def render_text(report: Report) -> str:
             g = report.gauges[w]
             lines.append(f"  {f'últimas {w} h':<{name_w}}{g.n:>5}{g.median:>{num_w},.1f}"
                          f"{g.mean:>{num_w},.1f}{g.p90:>{num_w},.1f}{g.max_value:>{num_w},.1f}  {g.max_name}")
+
+    if report.subbasins:
+        ws = sorted({w for sb in report.subbasins for w in sb.gauge_mm})
+        lines += ["", "LLUVIA POR SUBCUENCA (mm; pluviómetros interpolados y MERGE diario)",
+                  f"  {'área incremental':<{name_w}}{'km²':>8}{'pluv':>6}"
+                  + "".join(f"{f'{w} h':>8}" for w in ws) + f"{'MERGE 1d':>10}{'3d':>7}"]
+        for sb in report.subbasins:
+            cells = "".join(f"{sb.gauge_mm[w]:>8,.1f}" if w in sb.gauge_mm else f"{'—':>8}" for w in ws)
+            m1 = f"{sb.merge_mm[1]:>10,.1f}" if 1 in sb.merge_mm else f"{'—':>10}"
+            m3 = f"{sb.merge_mm[3]:>7,.1f}" if 3 in sb.merge_mm else f"{'—':>7}"
+            lines.append(f"  {sb.name[:name_w]:<{name_w}}{sb.area_km2:>8,.0f}{sb.n_gauges:>6}{cells}{m1}{m3}")
 
     lines += ["", "PRECIPITACIÓN MEDIA AREAL (mm, MERGE)"]
     if report.precip:

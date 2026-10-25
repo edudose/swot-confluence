@@ -73,8 +73,38 @@ class InpeMerge(Source):
                     size += len(chunk)
         return size
 
+    def _read_grid(self, grib_path: Path):
+        """(valores, lons, lats) recortados a la caja, con longitudes en -180..180."""
+        xr = _require_grib()
+        lon_min, lat_min, lon_max, lat_max = self.cfg.basin.bbox
+        with xr.open_dataset(grib_path, engine="cfgrib", backend_kwargs={"indexpath": ""}) as ds:
+            da = ds[next(iter(ds.data_vars))]
+            lon_name = "longitude" if "longitude" in da.coords else "lon"
+            lat_name = "latitude" if "latitude" in da.coords else "lat"
+            if float(da[lon_name].max()) > 180:
+                da = da.assign_coords({lon_name: (((da[lon_name] + 180) % 360) - 180)}).sortby(lon_name)
+            if float(da[lat_name][0]) > float(da[lat_name][-1]):
+                da = da.sortby(lat_name)
+            clip = da.sel({lon_name: slice(lon_min - 0.2, lon_max + 0.2),
+                           lat_name: slice(lat_min - 0.2, lat_max + 0.2)})
+            return clip.values, clip[lon_name].values, clip[lat_name].values
+
+    def areal_means(self, grib_path: Path) -> dict[str, float]:
+        """Lámina media sobre el contorno real (`basin`) y cada subcuenca (`sb_<id>`).
+
+        Sin capa de subcuencas cae a la caja envolvente, que sobreestima al
+        incluir áreas vecinas.
+        """
+        from iguacu_monitor import subbasins
+
+        subs = subbasins.load(self.cfg.subbasins_path) if self.cfg.subbasins_path else []
+        if not subs:
+            return {BASIN_SITE: self.basin_mean(grib_path)}
+        values, lons, lats = self._read_grid(grib_path)
+        return subbasins.areal_means(values, lons, lats, subs)
+
     def basin_mean(self, grib_path: Path) -> float:
-        """Lámina media areal sobre la cuenca, en mm."""
+        """Lámina media sobre la caja envolvente de la cuenca, en mm."""
         xr = _require_grib()
         lon_min, lat_min, lon_max, lat_max = self.cfg.basin.bbox
 
@@ -122,7 +152,8 @@ class InpeMerge(Source):
             result.size_bytes = size
             result.content_type = "application/grib2"
             try:
-                mean = self.basin_mean(dest)
+                means = self.areal_means(dest)
+                mean = means.get(BASIN_SITE, float("nan"))
             except MissingGribSupport as exc:
                 result.notes.append(str(exc))
                 result.ok = True  # la descarga sí funcionó
@@ -132,9 +163,11 @@ class InpeMerge(Source):
                 result.error = f"descarga OK pero no se pudo leer: {exc}"
                 return result
 
-            result.parsed = 1
+            result.parsed = len(means)
             result.ok = True
-            result.sample = f"{day:%Y-%m-%d}  lámina media areal = {mean:.2f} mm"
+            lines = [f"{day:%Y-%m-%d}  lámina media areal (cuenca) = {mean:.2f} mm"]
+            lines += [f"  {k:24} {v:6.2f} mm" for k, v in means.items() if k != BASIN_SITE]
+            result.sample = "\n".join(lines)
         return result
 
     def fetch(self, start: date, end: date) -> list[Observation]:
@@ -145,16 +178,14 @@ class InpeMerge(Source):
                 dest = Path(tmp) / f"merge_{day:%Y%m%d}.grib2"
                 try:
                     self._download(day, dest)
-                    mean = self.basin_mean(dest)
+                    means = self.areal_means(dest)
                 except http.FetchError:
                     day += timedelta(days=1)   # día aún no publicado
                     continue
-                out.append(Observation(
-                    source=self.name, site=BASIN_SITE, variable=PRECIP,
-                    # El acumulado diario de MERGE se sella al cierre del día.
-                    timestamp=datetime.combine(day, time(12, 0), tzinfo=timezone.utc),
-                    value=mean,
-                    meta={"bbox": list(self.cfg.basin.bbox)},
-                ))
+                # El acumulado diario de MERGE (12 a 12 UTC) se sella al cierre.
+                stamp = datetime.combine(day, time(12, 0), tzinfo=timezone.utc)
+                for site, value in means.items():
+                    out.append(Observation(source=self.name, site=site, variable=PRECIP,
+                                           timestamp=stamp, value=value))
                 day += timedelta(days=1)
         return out

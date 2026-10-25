@@ -152,10 +152,10 @@ def test_merge_skips_unpublished_days(monkeypatch):
         return 1
 
     monkeypatch.setattr(src, "_download", fake_download)
-    monkeypatch.setattr(src, "basin_mean", lambda path: 12.5)
+    monkeypatch.setattr(src, "areal_means", lambda path: {"basin": 12.5, "sb_segredo": 20.0})
     obs = src.fetch(date(2026, 10, 23), date(2026, 10, 25))
-    assert [o.timestamp.day for o in obs] == [23, 24]
-    assert all(o.value == 12.5 for o in obs)
+    assert sorted({o.timestamp.day for o in obs}) == [23, 24]
+    assert {(o.site, o.value) for o in obs} == {("basin", 12.5), ("sb_segredo", 20.0)}
 
 
 # ------------------------------------------------ ANA HidroWebService -----
