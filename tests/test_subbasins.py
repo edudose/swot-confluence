@@ -85,7 +85,8 @@ def test_uniform_rain_gives_uniform_subbasins():
     assert len(rep.subbasins) == _n()
     for sb in rep.subbasins:
         assert sb.gauge_mm[24] == pytest.approx(24.0, rel=1e-6)
-        assert sb.gauge_mm[6] == pytest.approx(6.0, rel=1e-6)
+        assert sb.gauge_mm[12] == pytest.approx(12.0, rel=1e-6)
+        assert sb.gauge_mm[36] == pytest.approx(30.0, rel=1e-6)   # 30 h de datos cubren el 83 %
 
 
 def test_gauge_counts_per_subbasin_are_consistent():

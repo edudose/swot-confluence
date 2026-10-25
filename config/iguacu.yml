@@ -212,8 +212,8 @@ report:
   display_utc_offset_h: -3
   # Estaciones que van en la fila de la cascada, en orden.
   panel_stations: [porto_capanema, hotel_cataratas]
-  # Lluvia medida por los pluviómetros de ANA.
-  gauge_windows_h: [1, 3, 6, 24, 72]
+  # Lluvia medida por los pluviómetros (ANA en todas las ventanas, CEMADEN sólo en 24 h).
+  gauge_windows_h: [1, 3, 6, 12, 24, 36, 48, 72]
   gauge_min_coverage: 0.8        # fracción de lecturas esperadas en la ventana
   # Envolvente de lluvia plausible: gauge_max_1h_mm en 1 h, escalada con la
   # raíz de la duración (50 mm en 15 min, 173 mm en 3 h). Se aplica a cada
@@ -231,7 +231,7 @@ report:
   gauge_dry_frac: 0.25
   gauge_dry_min_window_h: 6
   # Lluvia por subcuenca: pluviómetros interpolados (IDW) a esta grilla.
-  subbasin_windows_h: [6, 24, 72]
+  subbasin_windows_h: [12, 24, 36, 48, 72]
   subbasin_grid_deg: 0.05
   # Crédito en el encabezado del monitor y al pie del cuadro de lluvia por subcuenca.
   processed_by: "Sector Hidrología / D.T EBY"
