@@ -218,6 +218,59 @@ def station_card(state: SiteState, band: float, tz: timezone, series_class: str)
 </article>'''
 
 
+# ------------------------------------------------------ onda hacia Cataratas
+def _when(t: datetime, tz: timezone) -> str:
+    local = t.astimezone(tz)
+    return f"{DIAS[local.weekday()]} {local:%H} h"
+
+
+def _when_range(a: datetime, b: datetime | None, tz: timezone) -> str:
+    """'dom 09–10 h', o 'sáb 23 h – dom 00 h' si cruza el día."""
+    if b is None or abs((b - a).total_seconds()) < 1800:
+        return _when(a, tz)
+    lo, hi = sorted((a.astimezone(tz), b.astimezone(tz)))
+    if lo.date() == hi.date():
+        return f"{DIAS[lo.weekday()]} {lo:%H}–{hi:%H} h"
+    return f"{_when(lo, tz)} – {_when(hi, tz)}"
+
+
+def wave_section(report: Report, cfg: Config, tz: timezone) -> str:
+    from iguacu_monitor.model import QDEF
+
+    w = report.wave
+    if not w or not w.arrivals:
+        return ""
+    target = cfg.site((cfg.report.get("panel_stations") or [])[-1]).label
+    up_label = next((s.site.label for s in report.sites if s.display_name == w.last_leg and s.site), w.last_leg)
+    est = (f", {fmt_int(w.lag_est_h)} h según las últimas 48 h (r {fmt_dec(w.lag_r, 2)})"
+           if w.lag_est_h is not None else "")
+    lede = (f"Lo que ya pasó aguas arriba, trasladado por el tiempo de viaje. {up_label}→{target}: "
+            f"{fmt_int(w.lag_cfg_h)} h configurado{est}. No incluye lluvia futura ni el aporte lateral "
+            f"entre puntos.")
+    steps = []
+    tgt_state = next((s for s in report.sites if s.display_name == w.target), None)
+    if w.target_q is not None and tgt_state and tgt_state.last_seen:
+        steps.append(f'<li class="now"><span class="k">Ahora en {escape(target)}</span>'
+                     f'<span class="v">{fmt_int(w.target_q)}</span>'
+                     f'<span class="t">{_when(tgt_state.last_seen, tz)}</span></li>')
+    if w.rising:
+        eta = w.front_seen + timedelta(hours=w.front_lag_h)
+        alt = (w.front_seen + timedelta(hours=w.lag_est_h)) if w.lag_est_h is not None else None
+        steps.append(f'<li><span class="k">Empieza a subir</span><span class="v">+{fmt_int(w.rise_q)}</span>'
+                     f'<span class="t">{_when_range(eta, alt, tz)}</span>'
+                     f'<span class="src">lo que subió {escape(up_label)} desde el {_when(w.front_seen, tz)}</span></li>')
+    for a in w.arrivals:
+        label = next((s.site.label for s in report.sites if s.display_name == a.name and s.site), a.name)
+        what = f"Llega lo que sale de {label}" if a.variable == QDEF else f"Llega lo que pasa por {label}"
+        steps.append(f'<li><span class="k">{escape(what)}</span><span class="v">{fmt_int(a.q)}</span>'
+                     f'<span class="t">{_when_range(a.eta, a.eta_alt, tz)}</span>'
+                     f'<span class="src">pasó el {_when(a.seen, tz)} · +{fmt_int(a.lag_h)} h</span></li>')
+    return f'''<section class="wave" aria-label="Onda hacia {escape(target)}">
+  <div><h2>Onda hacia {escape(target)}</h2><p class="lede">{escape(lede)}</p></div>
+  <ol class="steps">{"".join(steps)}</ol>
+</section>'''
+
+
 # --------------------------------------------------------- lluvia por subcuenca
 # Rampa azul validada (pasos 700 -> 100). En fondo oscuro el ancla se invierte:
 # lo seco queda cerca del fondo y lo lluvioso brilla.
@@ -498,6 +551,25 @@ table.sbt { width: 100%; border-collapse: collapse; font-variant-numeric: tabula
 .tbl-note { margin: 0; color: var(--muted); font-size: 0.8rem; }
 @media (min-width: 1100px) { .rain { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); } }
 
+/* Onda hacia Cataratas: una secuencia en el tiempo, de lo que hay ahora a lo
+   que ya viene en camino. */
+.wave { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+  display: grid; gap: 10px; }
+.wave h2 { margin: 0; font-family: var(--font-num); font-weight: 700; font-size: 1.05rem;
+  letter-spacing: 0.09em; text-transform: uppercase; }
+.wave .lede { margin: 2px 0 0; color: var(--muted); font-size: 0.88rem; line-height: 1.4; }
+.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.steps li { position: relative; min-width: 0; display: grid; gap: 2px; align-content: start;
+  background: var(--panel-hi); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.steps li.now { background: var(--bg); }
+.steps .k { color: var(--muted); font-size: 0.8rem; }
+.steps .v { font-family: var(--font-num); font-weight: 700; font-size: 1.7rem; line-height: 1.05;
+  font-variant-numeric: tabular-nums; }
+.steps .t { font-family: var(--font-num); font-weight: 700; font-size: 1.05rem; color: var(--warn); }
+.steps .now .t { color: var(--muted); }
+.steps .src { color: var(--muted); font-size: 0.78rem; }
+
 .foot { display: grid; gap: 6px; color: var(--muted); font-size: 0.85rem; }
 .foot ul { margin: 0; padding-left: 1.1em; display: grid; gap: 2px; }
 .foot p { margin: 0; }
@@ -542,8 +614,14 @@ def _rule_line(cfg: Config) -> str:
     return f'<p class="rule">Situación por el caudal que <b>entra</b>{origin}: {text}</p>'
 
 
-def _summary(report: Report) -> str:
+def _summary(report: Report, tz: timezone | None = None) -> str:
     pills: list[str] = []
+    w = report.wave
+    if tz and w and w.arrivals and w.target_q is not None:
+        big = max(w.arrivals, key=lambda a: a.q)
+        if big.q > w.target_q * 1.05:
+            pills.append(f'<li class="pill warn"><span class="k">Onda a {escape(w.target.replace("Hotel ", ""))}</span>'
+                         f'≈ {fmt_int(big.q)} m³/s · {_when_range(big.eta, big.eta_alt, tz)}</li>')
     alert = report.by_status(ALERTA)
     warn = report.by_status(ATENCION)
     if alert:
@@ -613,11 +691,12 @@ def render(report: Report, cfg: Config, *, note: str | None = None,
     <div class="clock"><span class="t">{clock}</span><span class="d">{date_line}</span></div>
   </header>
   {demo}
-  {_summary(report)}
+  {_summary(report, tz)}
   {_rule_line(cfg)}
   <section class="cascade" aria-label="Cascada del Iguazú, de aguas arriba hacia aguas abajo">
 {chr(10).join(cards)}
   </section>
+  {wave_section(report, cfg, tz)}
   {rain_section(report, cfg)}
   <footer class="foot">
     {f"<ul>{notes}</ul>" if notes else ""}

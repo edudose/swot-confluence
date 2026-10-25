@@ -316,6 +316,129 @@ def subbasin_rain(frame, cfg: Config, now: datetime, totals_by_window) -> tuple[
 
 
 @dataclass
+class Arrival:
+    """Caudal que pasó por un punto aguas arriba y cuándo llega al destino."""
+
+    name: str
+    variable: str          # qdef (lo que sale de una usina) o qobs (estación)
+    q: float
+    seen: datetime         # cuándo pasó por ese punto
+    lag_h: float           # tiempo de viaje acumulado hasta el destino (configurado)
+    lag_alt_h: float | None = None   # con el último tramo estimado de los datos
+
+    @property
+    def eta(self) -> datetime:
+        return self.seen + timedelta(hours=self.lag_h)
+
+    @property
+    def eta_alt(self) -> datetime | None:
+        return self.seen + timedelta(hours=self.lag_alt_h) if self.lag_alt_h is not None else None
+
+
+@dataclass
+class Wave:
+    """Onda hacia un punto del tronco por traslado de lo ya observado aguas arriba.
+
+    No es un pronóstico: no incluye lluvia futura ni aporte lateral entre
+    puntos, sólo traslada en el tiempo lo que ya pasó por cada punto.
+    """
+
+    target: str
+    target_q: float | None
+    last_leg: str                      # punto inmediatamente aguas arriba
+    lag_cfg_h: float
+    lag_est_h: float | None = None     # desfase estimado del último tramo
+    lag_r: float | None = None
+    front_seen: datetime | None = None  # inicio del ascenso aguas arriba
+    front_lag_h: float | None = None
+    rise_q: float | None = None         # cuánto subió aguas arriba desde el inicio
+    arrivals: list[Arrival] = field(default_factory=list)
+
+    @property
+    def rising(self) -> bool:
+        return self.front_seen is not None
+
+
+def estimate_lag(up: list[tuple[datetime, float]], down: list[tuple[datetime, float]],
+                 around_h: float, window_h: float = 48) -> tuple[float | None, float | None]:
+    """Desfase (h) que maximiza la correlación entre dos series horarias.
+
+    Sólo se acepta si la serie de aguas arriba varió (> 2 % de su media) y la
+    correlación es alta (r >= 0,9): con caudales planos el desfase no está
+    definido y cualquier cifra sería ruido.
+    """
+    import pandas as pd
+
+    if len(up) < 12 or len(down) < 12:
+        return None, None
+    u = pd.Series(dict(up)).sort_index().resample("1h").mean().interpolate(limit=3)
+    d = pd.Series(dict(down)).sort_index().resample("1h").mean().interpolate(limit=3)
+    end = min(u.index.max(), d.index.max())
+    u = u[u.index > end - pd.Timedelta(hours=window_h + around_h + 6)]
+    d = d[d.index > end - pd.Timedelta(hours=window_h)]
+    if u.std() < 0.02 * u.mean():
+        return None, None
+    best: tuple[float, int] | None = None
+    for lag in range(max(1, int(around_h) - 5), int(around_h) + 6):
+        r = d.corr(u.shift(lag, freq="1h").reindex(d.index))
+        if r == r and (best is None or r > best[0]):
+            best = (float(r), lag)
+    if best is None or best[0] < 0.9:
+        return None, None
+    return float(best[1]), round(best[0], 3)
+
+
+def wave_to(target_key: str, states: list[SiteState], cfg: Config, max_points: int = 2) -> Wave | None:
+    by_key = {s.key: s for s in states}
+    chain = [p.key for p in cfg.plants] + list(cfg.report.get("panel_stations") or [])
+    if target_key not in chain:
+        return None
+    target = by_key.get(target_key)
+    if target is None or target.site is None or target.site.travel_h is None:
+        return None
+    i = chain.index(target_key)
+    up_key = chain[i - 1]
+    up = by_key.get(up_key)
+    wave = Wave(target=target.display_name, target_q=target.headline,
+                last_leg=up.display_name if up else up_key, lag_cfg_h=target.site.travel_h)
+
+    if up and up.series and target.series:
+        wave.lag_est_h, wave.lag_r = estimate_lag(up.series, target.series, target.site.travel_h)
+
+    # Traslado desde los puntos aguas arriba más cercanos, mientras se conozca
+    # el tiempo de viaje de cada tramo.
+    lag = 0.0
+    for j in range(i, 0, -1):
+        leg = by_key.get(chain[j])
+        if leg is None or leg.site is None or leg.site.travel_h is None:
+            break
+        lag += leg.site.travel_h
+        src = by_key.get(chain[j - 1])
+        if src is None or src.headline is None or src.last_seen is None:
+            continue
+        alt = lag - wave.lag_cfg_h + wave.lag_est_h if wave.lag_est_h is not None else None
+        wave.arrivals.append(Arrival(name=src.display_name, variable=src.headline_var,
+                                     q=src.headline, seen=src.last_seen, lag_h=lag, lag_alt_h=alt))
+        if len(wave.arrivals) >= max_points:
+            break
+
+    # Inicio del ascenso en el punto inmediato aguas arriba: el último dato
+    # todavía pegado al mínimo de las últimas 24 h (dentro de 2 %), si desde
+    # entonces subió de forma clara. Tomar el mínimo a secas cae en cualquier
+    # punto de la meseta previa, a veces horas antes de que empiece a subir.
+    if up and up.series:
+        recent = [p for p in up.series if p[0] >= up.series[-1][0] - timedelta(hours=24)]
+        q_min = min(q for _, q in recent)
+        q_now = recent[-1][1]
+        if q_now - q_min >= max(0.05 * q_min, 300):
+            flat = [t for t, q in recent if q <= q_min * 1.02]
+            wave.front_seen = max(flat)
+            wave.front_lag_h = wave.lag_cfg_h
+            wave.rise_q = q_now - q_min
+    return wave
+
+
+@dataclass
 class Report:
     generated: datetime
     basin: str
@@ -324,6 +447,7 @@ class Report:
     notes: list[str] = field(default_factory=list)
     gauges: dict[int, GaugeRain] = field(default_factory=dict)
     subbasins: list[SubBasinRain] = field(default_factory=list)
+    wave: Wave | None = None
 
     @property
     def plants(self) -> list[SiteState]:
@@ -456,8 +580,11 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
         notes.append(f"pluviómetro excluido de la lluvia medida: {name} "
                      f"({reason}; {total:,.0f} mm en {w} h)")
 
+    target = (cfg.report.get("panel_stations") or [None])[-1]
+    wave = wave_to(target, states, cfg) if target else None
+
     return Report(generated=now, basin=cfg.basin.name, sites=states,
-                  precip=precip, notes=notes, gauges=gauges, subbasins=subs)
+                  precip=precip, notes=notes, gauges=gauges, subbasins=subs, wave=wave)
 
 
 def render_text(report: Report) -> str:
@@ -500,6 +627,22 @@ def render_text(report: Report) -> str:
             g = report.gauges[w]
             lines.append(f"  {f'últimas {w} h':<{name_w}}{g.n:>5}{g.median:>{num_w},.1f}"
                          f"{g.mean:>{num_w},.1f}{g.p90:>{num_w},.1f}{g.max_value:>{num_w},.1f}  {g.max_name}")
+
+    if report.wave and report.wave.arrivals:
+        w = report.wave
+        local = timezone(timedelta(hours=-3))
+        est = (f"; estimado con 48 h: {w.lag_est_h:g} h (r {w.lag_r:.2f})" if w.lag_est_h is not None else "")
+        lines += ["", f"ONDA HACIA {w.target.upper()} (traslado de lo observado; sin lluvia futura ni aporte lateral)",
+                  f"  tiempo de viaje {w.last_leg}→{w.target}: {w.lag_cfg_h:g} h configurado{est}"]
+        if w.rising:
+            eta = w.front_seen + timedelta(hours=w.front_lag_h)
+            lines.append(f"  ascenso: empezó en {w.last_leg} {w.front_seen.astimezone(local):%d %H:%M} "
+                         f"-> llega ≈ {eta.astimezone(local):%d %H:%M} (hora local)")
+        for a in w.arrivals:
+            what = "sale de" if a.variable == QDEF else "pasa por"
+            alt = f" / {a.eta_alt.astimezone(local):%d %H:%M}" if a.eta_alt else ""
+            lines.append(f"  {a.q:>8,.0f} m³/s que {what} {a.name:<16} llega ≈ "
+                         f"{a.eta.astimezone(local):%d %H:%M}{alt}  (+{a.lag_h:g} h)")
 
     if report.subbasins:
         ws = sorted({w for sb in report.subbasins for w in sb.gauge_mm})
