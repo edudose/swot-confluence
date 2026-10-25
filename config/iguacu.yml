@@ -221,7 +221,7 @@ report:
   # Lluvia por subcuenca: pluviómetros interpolados (IDW) a esta grilla.
   subbasin_windows_h: [6, 24, 72]
   subbasin_grid_deg: 0.05
-  # Crédito al pie del cuadro de lluvia por subcuenca.
+  # Crédito en el encabezado del monitor y al pie del cuadro de lluvia por subcuenca.
   processed_by: "Sector Hidrología / D.T EBY"
 
 # ---------------------------------------------------------------------------

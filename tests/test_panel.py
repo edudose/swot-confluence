@@ -164,6 +164,11 @@ def test_panel_clock_uses_local_time(html):
     assert ">22:00<" in html and "vie 23 oct 2026" in html
 
 
+def test_panel_header_credits_the_processing_team(html):
+    header = html[html.index('<header class="top">'):html.index("</header>")]
+    assert "Procesado por: Sector Hidrología / D.T EBY" in header
+
+
 def test_fragment_has_no_document_skeleton(html):
     assert "<html" not in html and "<body" not in html and "<!doctype" not in html.lower()
     assert "<title>Cascada del Iguazú</title>" in html

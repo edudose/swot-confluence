@@ -443,6 +443,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--fo
 .top h1 { margin: 0; font-family: var(--font-num); font-weight: 700; font-size: 1.05rem;
   letter-spacing: 0.09em; text-transform: uppercase; text-wrap: balance; }
 .top .sub { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
+.top .by { margin: 4px 0 0; color: var(--muted); font-size: 0.82rem; font-weight: 500; letter-spacing: 0.02em; }
 .clock { text-align: right; font-variant-numeric: tabular-nums; }
 .clock .t { display: block; font-family: var(--font-num); font-weight: 600; font-size: 2.3rem; line-height: 1; }
 .clock .d { color: var(--muted); font-size: 0.88rem; }
@@ -675,6 +676,8 @@ def render(report: Report, cfg: Config, *, note: str | None = None,
             cards.append(station_card(station_by_key[key], band, tz, series_class))
 
     notes = "".join(f"<li>{escape(n)}</li>" for n in report.notes)
+    who = cfg.report.get("processed_by")
+    by = f'\n      <p class="by">Procesado por: {escape(who)}</p>' if who else ""
     demo = (f'<p class="demo"><strong>Datos de ejemplo.</strong> {escape(note)}</p>'
             if note else "")
 
@@ -689,7 +692,7 @@ def render(report: Report, cfg: Config, *, note: str | None = None,
   <header class="top">
     <div>
       <h1>Cuenca del {escape(cfg.basin.name.replace("Rio ", "").replace("Iguaçu", "Iguazú"))}</h1>
-      <p class="sub">Regulación de la cascada y caudal en el tronco</p>
+      <p class="sub">Regulación de la cascada y caudal en el tronco</p>{by}
     </div>
     <div class="clock"><span class="t">{clock}</span><span class="d">{date_line}</span></div>
   </header>
