@@ -158,10 +158,10 @@ sources:
 
   ana:
     enabled: true
-    # `legacy` no requiere credenciales. `hidrowebservice` sí: pedirlas a
-    # hidro@ana.gov.br / telemetria@ana.gov.br y exportarlas como
-    # ANA_HWS_USER / ANA_HWS_PASS.
-    mode: legacy
+    # auto: API nueva si ANA_HWS_USER y ANA_HWS_PASS están en el entorno,
+    # servicio legacy (sin credenciales) si no. También: legacy | hidrowebservice.
+    # Las credenciales van en el entorno, nunca en este archivo.
+    mode: auto
     legacy_base: "https://telemetriaws1.ana.gov.br/ServiceANA.asmx"
     hws_base: "https://www.ana.gov.br/hidrowebservice"
     timeout: 90

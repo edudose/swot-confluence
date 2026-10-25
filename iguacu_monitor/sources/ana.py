@@ -3,9 +3,16 @@
 Dos caminos:
 
 * `legacy`  -> telemetriaws1.ana.gov.br/ServiceANA.asmx, XML, sin credenciales.
-* `hidrowebservice` -> API nueva, requiere usuario y contraseña que ANA
-  entrega por correo (hidro@ana.gov.br / telemetria@ana.gov.br). El token se
-  pide en /EstacoesTelemetricas/OAUth/v1 y vence; se renueva solo.
+* `hidrowebservice` -> API nueva (www.ana.gov.br/hidrowebservice), con
+  usuario y contraseña que ANA entrega por correo. El token se pide en
+  /EstacoesTelemetricas/OAUth/v1, dura una hora y se renueva solo. Trae
+  varias estaciones por pedido y un indicador de calidad por dato.
+
+Con `mode: auto` (por defecto) se usa la API nueva si están ANA_HWS_USER y
+ANA_HWS_PASS en el entorno, y el servicio legacy si no.
+
+Ambos entregan la cota en centímetros y la hora en Brasilia sin declararlo;
+la API nueva filtra además por la fecha LOCAL, no por la UTC.
 
 `discover` resuelve el código de una estación por nombre, que es como se
 completa `ana_code` cuando no se conoce (caso Porto Capanema).
@@ -24,6 +31,39 @@ from iguacu_monitor.sources.base import Source
 
 # Los datos de ANA vienen en hora local de Brasilia (UTC-3), sin indicarlo.
 BRASILIA = timezone(timedelta(hours=-3))
+
+# Ventanas que acepta la API nueva, de menor a mayor.
+HWS_RANGES = ((2, "DIAS_2"), (7, "DIAS_7"), (14, "DIAS_14"), (21, "DIAS_21"), (30, "DIAS_30"))
+
+_MONTHS = {m: i for i, m in enumerate(
+    ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], start=1)}
+
+
+def parse_validade(text: str | None) -> datetime | None:
+    """'Sat Oct 24 22:30:09 GMT-03:00 2026' -> datetime con zona."""
+    m = re.search(r"\w{3} (\w{3}) (\d{1,2}) (\d{2}):(\d{2}):(\d{2}) GMT([+-])(\d{2}):(\d{2}) (\d{4})",
+                  text or "")
+    if not m or m.group(1) not in _MONTHS:
+        return None
+    mon, day, hh, mm, ss, sign, oh, om, year = m.groups()
+    offset = timedelta(hours=int(oh), minutes=int(om)) * (1 if sign == "+" else -1)
+    return datetime(int(year), _MONTHS[mon], int(day), int(hh), int(mm), int(ss),
+                    tzinfo=timezone(offset))
+
+
+def hws_windows(start: date, end: date) -> list[tuple[date, str]]:
+    """Cubre [start, end] con pedidos (fecha de búsqueda, rango) de hasta 30 días.
+
+    La API devuelve los días del rango que terminan en la fecha de búsqueda.
+    """
+    out: list[tuple[date, str]] = []
+    cursor = end
+    while cursor >= start:
+        span = (cursor - start).days + 1
+        days, label = next(((d, l) for d, l in HWS_RANGES if d >= span), HWS_RANGES[-1])
+        out.append((cursor, label))
+        cursor -= timedelta(days=days)
+    return out
 
 # El esquema de ANA trae el typo "Hidrometereologicos"; casamos por sufijo
 # para sobrevivir a que lo corrijan.
@@ -49,6 +89,20 @@ def _to_float(raw: str | None) -> float | None:
 
 class ANA(Source):
     name = "ana"
+
+    def __init__(self, cfg) -> None:
+        super().__init__(cfg)
+        self._token: str | None = None
+        self._token_until: datetime | None = None
+
+    @property
+    def uses_hws(self) -> bool:
+        mode = self.opts.get("mode", "auto")
+        if mode == "hidrowebservice":
+            return True
+        if mode == "legacy":
+            return False
+        return bool(os.getenv("ANA_HWS_USER") and os.getenv("ANA_HWS_PASS"))
 
     # ---------------------------------------------------------------- legacy
     @property
@@ -102,26 +156,86 @@ class ANA(Source):
         return out
 
     # -------------------------------------------------------- hidrowebservice
+    @property
+    def hws_base(self) -> str:
+        return self.opts.get("hws_base", "https://www.ana.gov.br/hidrowebservice")
+
     def _hws_token(self) -> str:
+        now = datetime.now(timezone.utc)
+        if self._token and self._token_until and now < self._token_until - timedelta(minutes=2):
+            return self._token
         user, password = os.getenv("ANA_HWS_USER"), os.getenv("ANA_HWS_PASS")
         if not user or not password:
             raise http.FetchError(
-                "faltan credenciales: exportá ANA_HWS_USER y ANA_HWS_PASS. "
+                "faltan credenciales: definí ANA_HWS_USER y ANA_HWS_PASS en el entorno. "
                 "Se piden por correo a hidro@ana.gov.br o telemetria@ana.gov.br."
             )
-        base = self.opts.get("hws_base", "https://www.ana.gov.br/hidrowebservice")
         resp = http.get(
-            f"{base}/EstacoesTelemetricas/OAUth/v1",
+            f"{self.hws_base}/EstacoesTelemetricas/OAUth/v1",
             headers={"Identificador": user, "Senha": password},
             timeout=self.opts.get("timeout", 90),
         )
         resp.raise_for_status()
-        payload = resp.json()
-        token = (payload.get("items") or payload).get("tokenautenticacao") \
-            or (payload.get("items") or payload).get("tokenautenticação")
+        items = resp.json().get("items") or {}
+        token = items.get("tokenautenticacao") or items.get("tokenautenticação")
         if not token:
-            raise http.FetchError(f"la respuesta de OAuth no trae token: {payload}")
+            # El mensaje de ANA dice qué falló (credencial vencida, etc.);
+            # nunca se incluye el token ni la contraseña en el error.
+            raise http.FetchError(f"ANA rechazó la autenticación: {items.get('respostaautenticacao') or items.get('retorno')}")
+        self._token = token
+        self._token_until = parse_validade(items.get("validade")) or now + timedelta(minutes=55)
         return token
+
+    def _hws_rows(self, codes: list[int], start: date, end: date) -> list[dict]:
+        # La API filtra por fecha local: nunca pedir un día que en Brasilia
+        # todavía no empezó (de noche en UTC ya es "mañana").
+        end = min(end, datetime.now(BRASILIA).date())
+        rows: list[dict] = []
+        for busca, label in hws_windows(start, end):
+            resp = http.get(
+                f"{self.hws_base}/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v2",
+                params={
+                    "Codigos_Estacoes": ",".join(str(c) for c in codes),
+                    "Tipo Filtro Data": "DATA_LEITURA",
+                    "Data de Busca (yyyy-MM-dd)": busca.isoformat(),
+                    "Range Intervalo de busca": label,
+                },
+                headers={"Authorization": f"Bearer {self._hws_token()}"},
+                timeout=self.opts.get("timeout", 90),
+            )
+            resp.raise_for_status()
+            rows.extend(resp.json().get("items") or [])
+        return rows
+
+    def _parse_hws(self, rows: list[dict], start: date, end: date) -> list[Observation]:
+        by_code = {str(s.ana_code): s.key for s in self.cfg.stations if s.ana_code}
+        out: list[Observation] = []
+        seen: set[tuple] = set()
+        for row in rows:
+            key = by_code.get(str(row.get("codigoestacao", "")).strip())
+            stamp = str(row.get("Data_Hora_Medicao") or "")[:19]
+            if not key or not stamp:
+                continue
+            try:
+                local = datetime.strptime(stamp, "%Y-%m-%d %H:%M:%S").replace(tzinfo=BRASILIA)
+            except ValueError:
+                continue
+            if not (start <= local.date() <= end):
+                continue
+            when = local.astimezone(timezone.utc)
+            for field, var, scale in (("Vazao_Adotada", QOBS, 1.0),
+                                      ("Cota_Adotada", LEVEL, 0.01),   # centímetros
+                                      ("Chuva_Adotada", PRECIP, 1.0)):
+                value = _to_float(row.get(field))
+                if value is None or (key, var, when) in seen:
+                    continue
+                seen.add((key, var, when))
+                out.append(Observation(
+                    source=self.name, site=key, variable=var, timestamp=when,
+                    value=value * scale,
+                    meta={"status": row.get(f"{field}_Status")},
+                ))
+        return out
 
     # ------------------------------------------------------------- discovery
     def discover(self, name_fragment: str) -> list[dict[str, str]]:
@@ -165,8 +279,11 @@ class ANA(Source):
     def probe(self) -> ProbeResult:
         stations = [s for s in self.cfg.stations if s.ana_code]
         unresolved = [s.name for s in self.cfg.stations if not s.ana_code]
-        result = ProbeResult(source=self.name, ok=False,
-                             url=f"{self.legacy_base}/DadosHidrometeorologicos")
+        url = (f"{self.hws_base}/EstacoesTelemetricas/HidroinfoanaSerieTelemetricaAdotada/v2"
+               if self.uses_hws else f"{self.legacy_base}/DadosHidrometeorologicos")
+        result = ProbeResult(source=self.name, ok=False, url=url)
+        result.notes.append("vía API nueva (HidroWebService, con credenciales)" if self.uses_hws
+                            else "vía servicio legacy (sin credenciales)")
         if unresolved:
             result.notes.append(
                 f"sin código ANA: {', '.join(unresolved)} "
@@ -179,10 +296,22 @@ class ANA(Source):
         end = date.today()
         start = end - timedelta(days=2)
         total, samples = 0, []
+        by_site: dict[str, list[Observation]] = {}
+        if self.uses_hws:
+            try:
+                rows = self._hws_rows([int(s.ana_code) for s in stations], start, end)
+                for o in self._parse_hws(rows, start, end):
+                    by_site.setdefault(o.site, []).append(o)
+            except Exception as exc:  # noqa: BLE001
+                result.error = str(exc)
+                return result
         for site in stations:
             try:
-                nodes = self._legacy_series(int(site.ana_code), start, end)
-                obs = self._parse_records(nodes, site.key)
+                if self.uses_hws:
+                    obs = by_site.get(site.key, [])
+                else:
+                    nodes = self._legacy_series(int(site.ana_code), start, end)
+                    obs = self._parse_records(nodes, site.key)
             except Exception as exc:  # noqa: BLE001 - el probe reporta, no corta
                 result.notes.append(f"{site.name} ({site.ana_code}): {exc}")
                 continue
@@ -200,6 +329,9 @@ class ANA(Source):
         return result
 
     def fetch(self, start: date, end: date) -> list[Observation]:
+        if self.uses_hws:
+            codes = [int(s.ana_code) for s in self.cfg.stations if s.ana_code]
+            return self._parse_hws(self._hws_rows(codes, start, end), start, end)
         out: list[Observation] = []
         for site in self.cfg.stations:
             if not site.ana_code:

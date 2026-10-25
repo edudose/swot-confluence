@@ -1,7 +1,7 @@
 """Parseo de las respuestas de ANA y ONS, con muestras sintéticas."""
 
 import xml.etree.ElementTree as ET
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
@@ -156,3 +156,62 @@ def test_merge_skips_unpublished_days(monkeypatch):
     obs = src.fetch(date(2026, 10, 23), date(2026, 10, 25))
     assert [o.timestamp.day for o in obs] == [23, 24]
     assert all(o.value == 12.5 for o in obs)
+
+
+# ------------------------------------------------ ANA HidroWebService -----
+from iguacu_monitor.sources.ana import hws_windows, parse_validade
+
+HWS_ROWS = [  # forma real de HidroinfoanaSerieTelemetricaAdotada/v2
+    {"Chuva_Adotada": "0.00", "Chuva_Adotada_Status": "0", "Cota_Adotada": "790.00",
+     "Cota_Adotada_Status": "0", "Data_Atualizacao": "2026-10-24 21:30:06.543",
+     "Data_Hora_Medicao": "2026-10-24 21:00:00.0", "Vazao_Adotada": "10645.40",
+     "Vazao_Adotada_Status": "0", "codigoestacao": "65987000"},
+    {"Chuva_Adotada": None, "Chuva_Adotada_Status": "0", "Cota_Adotada": "380.00",
+     "Cota_Adotada_Status": "0", "Data_Atualizacao": "2026-10-24 21:30:06.623",
+     "Data_Hora_Medicao": "2026-10-24 21:00:00.0", "Vazao_Adotada": "9120.41",
+     "Vazao_Adotada_Status": "0", "codigoestacao": "65992500"},
+    {"codigoestacao": "99999999", "Data_Hora_Medicao": "2026-10-24 21:00:00.0", "Vazao_Adotada": "1"},
+]
+
+
+def test_hws_rows_parse_into_observations():
+    obs = ANA(_cfg())._parse_hws(HWS_ROWS, date(2026, 10, 24), date(2026, 10, 24))
+    got = {(o.site, o.variable): o.value for o in obs}
+    assert got[("porto_capanema", "qobs")] == 10645.40
+    assert got[("porto_capanema", "level")] == pytest.approx(7.90)   # cm -> m
+    assert got[("hotel_cataratas", "qobs")] == 9120.41
+    assert ("hotel_cataratas", "precip") not in got                  # chuva nula
+    assert all(o.timestamp == datetime(2026, 10, 25, 0, 0, tzinfo=timezone.utc) for o in obs)
+    assert {o.site for o in obs} == {"porto_capanema", "hotel_cataratas"}
+
+
+def test_hws_keeps_quality_status():
+    obs = ANA(_cfg())._parse_hws(HWS_ROWS, date(2026, 10, 24), date(2026, 10, 24))
+    assert all(o.meta.get("status") == "0" for o in obs)
+
+
+def test_parse_validade():
+    v = parse_validade("Sat Oct 24 22:30:09 GMT-03:00 2026")
+    assert v == datetime(2026, 10, 25, 1, 30, 9, tzinfo=timezone.utc)
+    assert parse_validade("cualquier cosa") is None
+
+
+@pytest.mark.parametrize("span,expected", [
+    (1, [(24, "DIAS_2")]),
+    (3, [(24, "DIAS_7")]),
+    (45, [(24, "DIAS_30"), (24 - 30, "DIAS_21")]),
+])
+def test_hws_windows_cover_the_period(span, expected):
+    end = date(2026, 10, 24)
+    start = end - timedelta(days=span - 1)
+    got = [((d - end).days + 24, label) for d, label in hws_windows(start, end)]
+    assert got == expected
+
+
+def test_auto_mode_follows_credentials(monkeypatch):
+    monkeypatch.delenv("ANA_HWS_USER", raising=False)
+    monkeypatch.delenv("ANA_HWS_PASS", raising=False)
+    assert ANA(_cfg()).uses_hws is False
+    monkeypatch.setenv("ANA_HWS_USER", "u")
+    monkeypatch.setenv("ANA_HWS_PASS", "p")
+    assert ANA(_cfg()).uses_hws is True
