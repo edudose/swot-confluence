@@ -166,7 +166,10 @@ stations:
 # ---------------------------------------------------------------------------
 subbasins:
   file: config/subcuencas_iguacu.geojson
-  outlets: [uniao_da_vitoria, foz_do_areia, segredo, salto_santiago, salto_osorio,
+  # Puntos de corte: las estructuras que regulan y los puntos de control del
+  # tronco aguas abajo. União da Vitória es una estación sin regulación: su
+  # cuenca queda dentro del área de Foz do Areia.
+  outlets: [foz_do_areia, segredo, salto_santiago, salto_osorio,
             salto_caxias, baixo_iguacu, porto_capanema, hotel_cataratas]
   # Direcciones de flujo condicionadas de HydroSHEDS v1 (15", ~450 m). Cada
   # punto se ajusta a la celda más cercana que drena al menos `snap_min_frac`

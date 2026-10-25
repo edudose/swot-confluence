@@ -53,6 +53,11 @@ drena a cada punto de control descontando lo que drena al anterior. Es la
 división que sirve para leer la operación, porque la lluvia sobre el área de
 una usina le llega como aporte lateral sin pasar por la anterior.
 
+Los puntos de corte son las seis usinas y los dos puntos de control del
+tronco aguas abajo (Capanema y Cataratas). União da Vitória no regula y no es
+un punto de corte: su cuenca (~24.200 km²) queda dentro del área de Foz do
+Areia, aunque la estación sigue en el monitor con su caudal y nivel.
+
 `config/subcuencas_iguacu.geojson` se generó con `iguacu-monitor subcuencas`
 a partir de las direcciones de flujo condicionadas de HydroSHEDS v1 (15",
 ~450 m). Cada punto se ajusta a la celda más cercana del cauce principal
@@ -61,8 +66,7 @@ el área obtenida con la de ANA, así el ajuste no fuerza la validación:
 
 | punto | drenaje (km²) | ANA (km²) | error | incremental (km²) |
 |---|---:|---:|---:|---:|
-| União da Vitória | 24.208 | 24.200 | +0,0 % | 24.208 |
-| Foz do Areia | 30.144 | 30.100 | +0,1 % | 5.936 |
+| Foz do Areia | 30.144 | 30.100 | +0,1 % | 30.144 |
 | Segredo | 34.364 | 34.400 | −0,1 % | 4.219 |
 | Salto Santiago | 43.903 | 43.900 | +0,0 % | 9.539 |
 | Salto Osório | 45.857 | 45.800 | +0,1 % | 1.954 |

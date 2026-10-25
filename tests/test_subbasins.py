@@ -18,7 +18,11 @@ def _cfg():
     return config.load("config/iguacu.yml")
 
 
-def test_layer_has_the_nine_cascade_areas_in_order():
+def _n():
+    return len(_cfg().subbasins_opts["outlets"])
+
+
+def test_layer_follows_the_configured_cut_points():
     subs = subbasins.load(LAYER)
     assert [s.id for s in subs] == _cfg().subbasins_opts["outlets"]
     assert sum(s.area_km2 for s in subs) == pytest.approx(67_223, rel=0.01)
@@ -28,7 +32,7 @@ def test_layer_validation_against_ana_is_recorded():
     """Cada polígono guarda su error de área de drenaje contra ANA."""
     data = json.load(open(LAYER, encoding="utf-8"))
     errors = [f["properties"]["drainage_error"] for f in data["features"]]
-    assert len(errors) == 9 and max(abs(e) for e in errors) <= 0.005
+    assert len(errors) == _n() and max(abs(e) for e in errors) <= 0.005
     assert data["metadata"]["max_area_error_vs_ana"] <= 0.005
 
 
@@ -48,7 +52,15 @@ def test_areal_means_follow_the_field():
     lats = np.arange(-26.95, -24.0, 0.1)
     field = np.tile(lons + 60.0, (len(lats), 1))
     means = subbasins.areal_means(field, lons, lats, subs)
-    assert means["sb_uniao_da_vitoria"] > means["sb_salto_caxias"] > means["sb_hotel_cataratas"]
+    assert means["sb_foz_do_areia"] > means["sb_salto_caxias"] > means["sb_hotel_cataratas"]
+
+
+def test_non_regulating_station_is_not_a_cut_point():
+    """União da Vitória no regula: su cuenca va dentro del área de Foz do Areia."""
+    ids = [s.id for s in subbasins.load(LAYER)]
+    assert "uniao_da_vitoria" not in ids
+    foz = next(s for s in subbasins.load(LAYER) if s.id == "foz_do_areia")
+    assert foz.area_km2 == pytest.approx(30_144, rel=0.01)
 
 
 def test_idw_reproduces_points_and_constants():
@@ -70,7 +82,7 @@ def _uniform_gauge_rain(mm_per_hour: float, hours: int = 30):
 
 def test_uniform_rain_gives_uniform_subbasins():
     rep = report.build(_uniform_gauge_rain(1.0), _cfg(), now=NOW)
-    assert len(rep.subbasins) == 9
+    assert len(rep.subbasins) == _n()
     for sb in rep.subbasins:
         assert sb.gauge_mm[24] == pytest.approx(24.0, rel=1e-6)
         assert sb.gauge_mm[6] == pytest.approx(6.0, rel=1e-6)
@@ -93,8 +105,8 @@ def test_panel_draws_the_rain_map():
     cfg = _cfg()
     page = panel.render(report.build(_uniform_gauge_rain(1.0), cfg, now=NOW), cfg, fragment=True)
     assert "Lluvia por subcuenca" in page
-    assert page.count('class="sb"') == 9
-    assert page.count('class="outlet"') == 9
+    assert page.count('class="sb"') == _n()
+    assert page.count('class="outlet"') == _n()
     assert "interpolar los vecinos" in page          # Cataratas no tiene pluviómetros
 
 
