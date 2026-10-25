@@ -30,6 +30,7 @@ iguacu-monitor report                # estado de la cuenca
 iguacu-monitor html                  # panel HTML de la cascada
 iguacu-monitor html --demo           # el panel con datos de ejemplo, sin red
 iguacu-monitor pluviometros          # rearmar la lista de pluviómetros ANA (API nueva)
+iguacu-monitor pluviometros --red cemaden   # rearmar la lista de CEMADEN
 iguacu-monitor subcuencas            # volver a delimitar las subcuencas (extra [geo])
 ```
 
@@ -117,7 +118,8 @@ Verificadas contra los servicios reales el 25-oct-2026, salvo COPEL.
 | `ons` | Regulación de las seis usinas: afluente, turbinado, vertido, defluente, nivel y volumen útil | **Verificada.** Base horaria con 1 a 2 h de rezago; usinas por `id_reservatorio`; hora de Brasilia. |
 | `ana` | Caudal y nivel en Capanema, Cataratas y União da Vitória | **Verificada.** Servicio legacy sin credenciales; nivel en centímetros, convertido a metros. |
 | `inpe_merge` | Lámina diaria media areal | **Verificada.** Acumulado de 12 a 12 UTC; el día en curso aún no publicado se saltea. |
-| `copel_mhb` | Regulación COPEL y estaciones propias | **Desactivada.** Cada punto se carga en un diálogo JSF dinámico que exige un rango de fechas; pendiente de implementar. ONS cubre las mismas usinas. |
+| `cemaden` | Pluviómetros automáticos municipales (146 en la cuenca y su borde) | **Verificada.** JSONP abierto del mapa interactivo (`resources.cemaden.gov.br/dados/311_24.json`); sólo el acumulado móvil de 24 h, sin series. Entra en la ventana de 24 h junto con ANA y la sostiene sola si ANA se cae. |
+| `copel_mhb` | Regulación COPEL y estaciones propias | **Desactivada.** La página navega por PrimeFaces: hay que abrir la cuenca, elegir el punto y cargar su diálogo; así devuelve 72 h horarias de cada usina y puesto, más la previsión de SIMEPAR para União da Vitória. Pendiente de convertir en fuente. ONS cubre las mismas usinas. |
 
 Los tiempos de viaje del tablero se confirmaron con correlación cruzada sobre
 los datos del 23 y 24-oct: Baixo Iguaçu → Capanema ≈ 4 h (r = 0,98) y
@@ -151,6 +153,12 @@ regresión que lo cubre.
 la etiqueta del sitio y las columnas por la de la variable. Si el portal
 reordena su tabla, sigue funcionando; si cambia un nombre, `probe` lo dice en
 vez de devolver vacío en silencio.
+
+**Un pluviómetro seco entre vecinos con lluvia se descarta.** El 24-oct-2026
+doce estaciones de ANA marcaron 0 mm con vecinos de 70 a 140 mm: sensores
+tapados o estaciones sin pluviómetro que transmiten ceros. Bajaban la lluvia
+areal de Foz do Areia de 122 a 110 mm. El control compara cada total con la
+mediana de sus vecinos a 50 km (`gauge_dry_*`) y lo informa en el panel.
 
 **Todo se almacena en UTC.** ANA entrega hora de Brasilia (UTC−3) sin
 declararlo; la conversión está cubierta por tests.

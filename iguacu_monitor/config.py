@@ -40,17 +40,19 @@ class Site:
 
 @dataclass
 class Gauge:
-    """Pluviómetro telemétrico de ANA usado para la lluvia medida."""
+    """Pluviómetro usado para la lluvia medida: ANA (serie cada 15 min) o
+    CEMADEN (acumulado de 24 h)."""
 
-    code: int
+    code: int | str
     name: str
     operator: str = ""
     lat: float | None = None
     lon: float | None = None
+    network: str = "ana"
 
     @property
     def key(self) -> str:
-        return f"pluv_{self.code}"
+        return f"cem_{self.code}" if self.network == "cemaden" else f"pluv_{self.code}"
 
 
 @dataclass
@@ -165,14 +167,19 @@ def load(path: str | Path = DEFAULT_CONFIG) -> Config:
 
     gauges_opts = raw.get("rain_gauges") or {}
     gauges_path = Path(gauges_opts["file"]) if gauges_opts.get("file") else None
+    cemaden_path = Path(gauges_opts["cemaden_file"]) if gauges_opts.get("cemaden_file") else None
     gauges: list[Gauge] = []
-    if gauges_path and gauges_path.exists():
-        listed = yaml.safe_load(gauges_path.read_text(encoding="utf-8")) or {}
+    for path, network in ((gauges_path, "ana"), (cemaden_path, "cemaden")):
+        if not path or not path.exists():
+            continue
+        listed = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         for g in listed.get("gauges") or []:
             gauges.append(Gauge(
-                code=int(g["code"]), name=str(g.get("name", "")),
+                code=int(g["code"]) if network == "ana" else str(g["code"]),
+                name=str(g.get("name", "")),
                 operator=str(g.get("operator", "")),
                 lat=_opt_float(g.get("lat")), lon=_opt_float(g.get("lon")),
+                network=network,
             ))
 
     return Config(

@@ -276,3 +276,40 @@ def test_sustained_impossible_rate_is_excluded():
     g = gauge_rain(_frame(_base() + sustained), _cfg())
     assert len(g[24].excluded) == 1
     assert g[24].excluded[0][2] == "lluvia por encima de lo físicamente plausible"
+
+
+def _cluster(n_neighbors=6):
+    """Un pluviómetro real y sus vecinos reales a menos de 50 km."""
+    import math
+    gs = [g for g in _cfg().gauges if g.lat is not None and g.key.startswith("pluv_")]
+
+    def km(a, b):
+        return math.hypot((a.lon - b.lon) * 111.2 * math.cos(math.radians(a.lat)), (a.lat - b.lat) * 111.2)
+    target = max(gs, key=lambda g: sum(1 for h in gs if h is not g and km(g, h) <= 50))
+    near = sorted((h for h in gs if h is not target and km(target, h) <= 50), key=lambda h: km(target, h))
+    return target, near[:n_neighbors]
+
+
+def test_dry_gauge_among_wet_neighbors_is_excluded():
+    """Caso real del 24/10/2026: 12 estaciones en 0 mm con vecinos de 70 a
+    140 mm. Un pluviómetro tapado no puede bajar la lluvia areal."""
+    target, near = _cluster()
+    obs = []
+    for g in near:
+        obs += _hourly(g.code, 4.0)                 # ~96 mm en 24 h
+    obs += _hourly(target.code, 0.0)
+    g = gauge_rain(_frame(obs), _cfg())
+    assert g[24].n == len(near)
+    assert [(n, why) for n, _, why in g[24].excluded] == [(target.name, report.DRY)]
+    assert g[1].n == len(near)                      # fuera de todas las ventanas
+
+
+def test_dry_check_ignores_light_rain_and_dry_basin():
+    target, near = _cluster()
+    obs = []
+    for g in near:
+        obs += _hourly(g.code, 0.5)                 # 12 mm en 24 h: lluvia débil
+    obs += _hourly(target.code, 0.0)
+    assert gauge_rain(_frame(obs), _cfg())[24].excluded == []
+    dry = [o for g in [target, *near] for o in _hourly(g.code, 0.0)]
+    assert gauge_rain(_frame(dry), _cfg())[24].excluded == []

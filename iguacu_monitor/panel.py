@@ -15,7 +15,7 @@ from html import escape
 
 from iguacu_monitor.config import Config
 from iguacu_monitor.model import LEVEL, QAFL, QTUR, QVER, STORAGE
-from iguacu_monitor.report import ALERTA, ATENCION, NIVEL, NORMAL, Report, SiteState
+from iguacu_monitor.report import ALERTA, ATENCION, NIVEL, NORMAL, RAIN_STALE_H, Report, SiteState
 
 DIAS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
 MESES = ["ene", "feb", "mar", "abr", "may", "jun",
@@ -335,9 +335,19 @@ def rain_section(report: Report, cfg: Config, window: int = 24, tz: timezone | N
         lx, ly = xy(pt.x, pt.y)
         labels.append(f'<text class="ord-label" x="{lx}" y="{ly + 8}">{sb.order}</text>')
 
-    gauges = [f'<circle class="gauge" cx="{x}" cy="{y}" r="3.2"/>'
-              for x, y in (xy(g.lon, g.lat) for g in cfg.gauges
-                           if g.lon is not None and contour.buffer(0.02).contains(_point(g.lon, g.lat)))]
+    # Sólo los pluviómetros que entraron en la ventana del mapa: los que no
+    # transmitieron o cayeron en el control de calidad no aportan.
+    used = report.gauges[window].sites if window in report.gauges else frozenset()
+    snug = contour.buffer(0.02)
+    gauges = []
+    for g in sorted(cfg.gauges, key=lambda g: g.network != "cemaden"):
+        if g.key not in used or g.lon is None or not snug.contains(_point(g.lon, g.lat)):
+            continue
+        x, y = xy(g.lon, g.lat)
+        cls = "gauge cem" if g.network == "cemaden" else "gauge"
+        gauges.append(f'<circle class="{cls}" cx="{x}" cy="{y}" r="3.2"/>')
+    nets = report.gauges[window].by_network if window in report.gauges else {}
+    networks = " y ".join(sorted(nets)) or "ANA"
     outlets = []
     for key in cfg.subbasins_opts.get("outlets") or []:
         site = cfg.site(key)
@@ -352,7 +362,8 @@ def rain_section(report: Report, cfg: Config, window: int = 24, tz: timezone | N
     legend = f'''<ul class="legend" aria-label="Escala de lluvia en {window} h, en milímetros">
   <li><div class="ramp">{swatches}</div><div class="ticks">{ticks}</div></li>
   <li>mm en {window} h</li>
-  <li class="sym"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.5" fill="currentColor"/></svg>pluviómetro</li>
+  <li class="sym"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.5" fill="currentColor"/></svg>pluviómetro ANA</li>
+  <li class="sym"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>pluviómetro CEMADEN</li>
   <li class="sym"><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" transform="rotate(45 6 6)" fill="currentColor"/></svg>punto de control</li>
 </ul>'''
 
@@ -384,7 +395,7 @@ def rain_section(report: Report, cfg: Config, window: int = 24, tz: timezone | N
     return f'''<section class="rain" aria-label="Lluvia por subcuenca">
   <div class="map-card">
     <div><h2>Lluvia por subcuenca · {window} h</h2>
-      <p class="lede">Áreas incrementales de la cascada, de la cabecera a Cataratas. Pluviómetros ANA interpolados (IDW).</p>{lag}</div>
+      <p class="lede">Áreas incrementales de la cascada, de la cabecera a Cataratas. Pluviómetros {networks} interpolados (IDW).</p>{lag}</div>
     <svg class="map" viewBox="0 0 1000 {height}" role="img" aria-label="Mapa de lluvia en {window} horas por subcuenca">
       {"".join(shapes)}{"".join(gauges)}{"".join(outlets)}{"".join(labels)}
     </svg>
@@ -395,7 +406,7 @@ def rain_section(report: Report, cfg: Config, window: int = 24, tz: timezone | N
       <thead><tr><th>#</th><th>Área incremental</th><th>km²</th><th>pluv.</th>{head}<th>MERGE 1 d</th></tr></thead>
       <tbody>{"".join(rows)}</tbody>
     </table></div>
-    <p class="tbl-note">Valores en mm. {note}"pluv." cuenta los pluviómetros con dato en 24 h. MERGE: lámina diaria satelital-pluviométrica de INPE, de 12 a 12 UTC, con rezago. Subcuencas delimitadas con HydroSHEDS y validadas contra las áreas de drenaje de ANA (error ≤ 0,2 %).</p>{credit}
+    <p class="tbl-note">Valores en mm. {note}"pluv." cuenta los pluviómetros con dato en 24 h, de ANA y CEMADEN; 6 h y 72 h salen sólo de ANA, porque CEMADEN publica únicamente el acumulado de 24 h. Se descartan los pluviómetros secos entre vecinos con lluvia. MERGE: lámina diaria satelital-pluviométrica de INPE, de 12 a 12 UTC, con rezago. Subcuencas delimitadas con HydroSHEDS y validadas contra las áreas de drenaje de ANA (error ≤ 0,2 %).</p>{credit}
   </div>
 </section>'''
 
@@ -532,6 +543,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--fo
 .map .sb:hover { stroke: var(--fg); }
 .map .outlet { fill: var(--fg); stroke: var(--bg); stroke-width: 2; }
 .map .gauge { fill: var(--fg); fill-opacity: 0.85; stroke: var(--bg); stroke-width: 1.5; }
+.map .gauge.cem { fill: none; stroke: var(--fg); stroke-opacity: 0.9; stroke-width: 1.6; }
 .map .ord-label { font-family: var(--font-num); font-weight: 700; font-size: 24px; fill: var(--bg);
   paint-order: stroke; stroke: var(--fg); stroke-width: 5px; stroke-linejoin: round; text-anchor: middle; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin: 0; padding: 0;
@@ -643,12 +655,21 @@ def _summary(report: Report, tz: timezone | None = None) -> str:
                      f'{len(report.spilling)} de {len(with_data)} usinas</li>')
     if report.gauges:
         g = report.gauges.get(24) or report.gauges[max(report.gauges)]
-        until = f" hasta {_when(report.rain_until, tz)}" if tz and report.rain_stale else ""
-        short = [f"{w} h {fmt_dec(report.gauges[w].median)}" for w in (1, 6) if w in report.gauges]
+
+        def fresh(x) -> bool:
+            return x.until is not None and (report.generated - x.until).total_seconds() / 3600 <= RAIN_STALE_H
+        until = f" hasta {_when(g.until, tz)}" if tz and g.until and not fresh(g) else ""
+        # Las ventanas cortas sólo si están al día: un "1 h 0,0" de hace
+        # nueve horas se leería como que no llueve ahora.
+        short = [f"{w} h {fmt_dec(report.gauges[w].median)}" for w in (1, 6)
+                 if w in report.gauges and fresh(report.gauges[w])]
+        count = f"{g.n} pluviómetros"
+        if len(g.by_network) > 1:
+            count += " (" + ", ".join(f"{k} {v}" for k, v in sorted(g.by_network.items())) + ")"
         pills.append(
             f'<li class="pill"><span class="k">Lluvia medida {g.window_h} h{until}</span>'
             f'mediana {fmt_dec(g.median)} mm · máx {fmt_dec(g.max_value)} mm '
-            f'({escape(station_title(g.max_name))}) · {" · ".join(short + [f"{g.n} pluviómetros"])}</li>')
+            f'({escape(station_title(g.max_name))}) · {" · ".join(short + [count])}</li>')
     if report.precip:
         bits = [f"{w} d {fmt_dec(report.precip[w])} mm"
                 for w in (1, 3, 7) if w in report.precip]
@@ -710,7 +731,7 @@ def render(report: Report, cfg: Config, *, note: str | None = None,
   {rain_section(report, cfg, tz=tz)}
   <footer class="foot">
     {f"<ul>{notes}</ul>" if notes else ""}
-    <p>Fuentes: ONS (usinas, horario), ANA (caudal y pluviómetros), INPE MERGE (lluvia diaria), HydroSHEDS (subcuencas; Lehner et al., 2008) · la lluvia medida de la cabecera es la mediana de los pluviómetros, no una media areal · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>
+    <p>Fuentes: ONS (usinas, horario), ANA (caudal y pluviómetros), CEMADEN (pluviómetros, 24 h), INPE MERGE (lluvia diaria), HydroSHEDS (subcuencas; Lehner et al., 2008) · la lluvia medida de la cabecera es la mediana de los pluviómetros, no una media areal · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>
   </footer>
 </main>'''
 

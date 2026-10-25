@@ -10,6 +10,7 @@ from pathlib import Path
 
 from iguacu_monitor import config, demo, panel, report, store
 from iguacu_monitor.sources.ana import ANA
+from iguacu_monitor.sources.cemaden import Cemaden
 from iguacu_monitor.sources.copel_mhb import CopelMHB
 from iguacu_monitor.sources.inpe_merge import InpeMerge
 from iguacu_monitor.sources.ons import ONS
@@ -17,6 +18,7 @@ from iguacu_monitor.sources.ons import ONS
 SOURCES = {
     "copel_mhb": CopelMHB,
     "ana": ANA,
+    "cemaden": Cemaden,
     "inpe_merge": InpeMerge,
     "ons": ONS,
 }
@@ -93,6 +95,8 @@ def cmd_pluviometros(args) -> int:
     from datetime import datetime, timezone
 
     cfg = config.load(args.config)
+    if args.red == "cemaden":
+        return _pluviometros_cemaden(cfg, args.dry_run)
     ana = ANA(cfg)
     if not ana.uses_hws:
         print("hace falta la API nueva de ANA: definí ANA_HWS_USER y ANA_HWS_PASS", file=sys.stderr)
@@ -116,6 +120,34 @@ def cmd_pluviometros(args) -> int:
     cfg.gauges_path.parent.mkdir(parents=True, exist_ok=True)
     cfg.gauges_path.write_text(header + body, encoding="utf-8")
     print(f"{len(gauges)} pluviómetros escritos en {cfg.gauges_path}")
+    return 0
+
+
+def _pluviometros_cemaden(cfg: config.Config, dry_run: bool) -> int:
+    """Catálogo de CEMADEN: estaciones a menos de ~10 km del contorno, las
+    mismas que la interpolación usa para no subestimar los bordes."""
+    import yaml
+    from datetime import datetime, timezone
+
+    from iguacu_monitor import subbasins
+
+    target = cfg.gauges_opts.get("cemaden_file")
+    if not target or not cfg.subbasins_path:
+        print("faltan rain_gauges.cemaden_file y la capa de subcuencas en la configuración", file=sys.stderr)
+        return 1
+    area = subbasins.outline(subbasins.load(cfg.subbasins_path)).buffer(0.1)
+    gauges = Cemaden(cfg).discover(area)
+    print(f"· {len(gauges)} estaciones de CEMADEN a menos de ~10 km de la cuenca")
+    if dry_run:
+        return 0
+    header = (f"# Pluviómetros automáticos de CEMADEN en la cuenca del Iguazú (acumulado de 24 h).\n"
+              f"# Generado por `iguacu-monitor pluviometros --red cemaden` el "
+              f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC. Se puede editar a mano.\n")
+    body = yaml.safe_dump({"gauges": gauges}, allow_unicode=True, sort_keys=False)
+    path = Path(target)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(header + body, encoding="utf-8")
+    print(f"{len(gauges)} pluviómetros escritos en {path}")
     return 0
 
 
@@ -226,7 +258,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("report", help="estado actual de la cuenca")
     p.set_defaults(func=cmd_report)
 
-    p = sub.add_parser("pluviometros", help="armar la lista de pluviómetros ANA de la cuenca")
+    p = sub.add_parser("pluviometros", help="armar la lista de pluviómetros de la cuenca")
+    p.add_argument("--red", choices=("ana", "cemaden"), default="ana", help="red de pluviómetros (defecto: ana)")
     p.add_argument("--dry-run", action="store_true", help="mostrar el resultado sin escribir el archivo")
     p.set_defaults(func=cmd_pluviometros)
 

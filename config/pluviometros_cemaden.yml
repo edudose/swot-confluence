@@ -1,0 +1,879 @@
+# Pluviómetros automáticos de CEMADEN en la cuenca del Iguazú (acumulado de 24 h).
+# Generado por `iguacu-monitor pluviometros --red cemaden` el 2026-10-25 13:09 UTC. Se puede editar a mano.
+gauges:
+- code: 410040001A
+  name: ALMIRANTE TAMANDARÉ - Centro
+  operator: CEMADEN
+  lat: -25.31
+  lon: -49.298
+  type: Pluviométrica
+- code: 410040002A
+  name: ALMIRANTE TAMANDARÉ - Jardim Planalto
+  operator: CEMADEN
+  lat: -25.312
+  lon: -49.308
+  type: Pluviométrica
+- code: 410040003A
+  name: ALMIRANTE TAMANDARÉ - Jardim Graziela
+  operator: CEMADEN
+  lat: -25.343
+  lon: -49.246
+  type: Pluviométrica
+- code: 410040004A
+  name: ALMIRANTE TAMANDARÉ - Tranqueira
+  operator: CEMADEN
+  lat: -25.259
+  lon: -49.301
+  type: Pluviométrica
+- code: 410040005A
+  name: ALMIRANTE TAMANDARÉ - Jardim Bonfim
+  operator: CEMADEN
+  lat: -25.344
+  lon: -49.28
+  type: Pluviométrica
+- code: 410040006A
+  name: ALMIRANTE TAMANDARÉ - Jardim Tanguá
+  operator: CEMADEN
+  lat: -25.371
+  lon: -49.308
+  type: Pluviométrica
+- code: 410040008A
+  name: ALMIRANTE TAMANDARÉ - Jardim Rosana
+  operator: CEMADEN
+  lat: -25.316
+  lon: -49.267
+  type: Pluviométrica
+- code: 410180402A
+  name: ARAUCÁRIA - Centro
+  operator: CEMADEN
+  lat: -25.595
+  lon: -49.388
+  type: Pluviométrica
+- code: 410180403A
+  name: ARAUCÁRIA - Califórnia
+  operator: CEMADEN
+  lat: -25.54311
+  lon: -49.38147
+  type: Pluviométrica
+- code: 410260401A
+  name: BARRACÃO - G2-410260401A
+  operator: CEMADEN
+  lat: -26.2307
+  lon: -53.5812
+  type: Pluviométrica
+- code: 410260402A
+  name: BARRACÃO - G2-410260402A
+  operator: CEMADEN
+  lat: -26.2342
+  lon: -53.6378
+  type: Pluviométrica
+- code: 410260403A
+  name: BARRACÃO - G2-410260403A
+  operator: CEMADEN
+  lat: -26.2535
+  lon: -53.6332
+  type: Pluviométrica
+- code: 410290101A
+  name: BITURUNA - G2-410290101A
+  operator: CEMADEN
+  lat: -26.1594
+  lon: -51.5603
+  type: Pluviométrica
+- code: 410290102A
+  name: BITURUNA - G2-410290102A
+  operator: CEMADEN
+  lat: -26.2154
+  lon: -51.7129
+  type: Pluviométrica
+- code: 410315601A
+  name: BOM JESUS DO SUL - Centro
+  operator: CEMADEN
+  lat: -26.19174
+  lon: -53.60245
+  type: Pluviométrica
+- code: 410400601A
+  name: CAMPINA GRANDE DO SUL - Jardim Diamante
+  operator: CEMADEN
+  lat: -25.334
+  lon: -49.079
+  type: Pluviométrica
+- code: 410400602A
+  name: CAMPINA GRANDE DO SUL - Jardim Graciosa
+  operator: CEMADEN
+  lat: -25.356
+  lon: -49.109
+  type: Pluviométrica
+- code: 410400603A
+  name: CAMPINA GRANDE DO SUL - Jardim da Colina
+  operator: CEMADEN
+  lat: -25.311
+  lon: -49.053
+  type: Pluviométrica
+- code: 410410501A
+  name: CAMPO DO TENENTE - Centro
+  operator: CEMADEN
+  lat: -25.98
+  lon: -49.68408
+  type: Pluviométrica
+- code: 410420401A
+  name: CAMPO LARGO - Ferraria
+  operator: CEMADEN
+  lat: -25.43937
+  lon: -49.45527
+  type: Pluviométrica
+- code: 410420401H
+  name: CAMPO LARGO - Rio Cambui
+  operator: CEMADEN
+  lat: -25.4556
+  lon: -49.5204
+  type: Hidrológica
+- code: 410420402A
+  name: CAMPO LARGO - Vila Andreas
+  operator: CEMADEN
+  lat: -25.44889
+  lon: -49.55519
+  type: Pluviométrica
+- code: 410420403A
+  name: CAMPO LARGO - Vila Bancaria
+  operator: CEMADEN
+  lat: -25.46856
+  lon: -49.52551
+  type: Pluviométrica
+- code: 410425301A
+  name: CAMPO MAGRO - Centro
+  operator: CEMADEN
+  lat: -25.3689
+  lon: -49.45687
+  type: Pluviométrica
+- code: 410445101A
+  name: CANTAGALO - Centro
+  operator: CEMADEN
+  lat: -25.37189
+  lon: -52.12705
+  type: Pluviométrica
+- code: 410460001A
+  name: CAPITÃO LEÔNIDAS MARQUES - Bom Jesus
+  operator: CEMADEN
+  lat: -25.438
+  lon: -53.633
+  type: Pluviométrica
+- code: 410460002A
+  name: CAPITÃO LEÔNIDAS MARQUES - Rua Catanduvas
+  operator: CEMADEN
+  lat: -25.481
+  lon: -53.606
+  type: Pluviométrica
+- code: 410460003A
+  name: CAPITÃO LEÔNIDAS MARQUES - Centro
+  operator: CEMADEN
+  lat: -25.48545
+  lon: -53.60749
+  type: Pluviométrica
+- code: 410480804A
+  name: CASCAVEL - Un. de Saúde Centro
+  operator: CEMADEN
+  lat: -24.9571
+  lon: -53.45782
+  type: Pluviométrica
+- code: 410480805A
+  name: CASCAVEL - Centro
+  operator: CEMADEN
+  lat: -24.99532
+  lon: -53.46367
+  type: Pluviométrica
+- code: 410480806A
+  name: CASCAVEL - Tarumã
+  operator: CEMADEN
+  lat: -24.92027
+  lon: -53.43528
+  type: Pluviométrica
+- code: 410540901A
+  name: CHOPINZINHO - G2-410540901A
+  operator: CEMADEN
+  lat: -25.8163
+  lon: -52.618
+  type: Pluviométrica
+- code: 410540902A
+  name: CHOPINZINHO - G2-410540902A
+  operator: CEMADEN
+  lat: -25.8517
+  lon: -52.5506
+  type: Pluviométrica
+- code: 410580501A
+  name: COLOMBO - Alto da Cruz
+  operator: CEMADEN
+  lat: -25.3612
+  lon: -49.1892
+  type: Pluviométrica
+- code: 410650601A
+  name: CORONEL VIVIDA - Prefeitura Municipal
+  operator: CEMADEN
+  lat: -25.97998
+  lon: -52.56345
+  type: Pluviométrica
+- code: 410680301A
+  name: CRUZ MACHADO - G2-410680301A
+  operator: CEMADEN
+  lat: -25.9439
+  lon: -51.2562
+  type: Pluviométrica
+- code: 410680302A
+  name: CRUZ MACHADO - G2-410680302A
+  operator: CEMADEN
+  lat: -26.0142
+  lon: -51.3477
+  type: Pluviométrica
+- code: 410690201A
+  name: CURITIBA - Butiatuvinha
+  operator: CEMADEN
+  lat: -25.41118
+  lon: -49.36184
+  type: Pluviométrica
+- code: 410690202A
+  name: CURITIBA - Cachoeira
+  operator: CEMADEN
+  lat: -25.3536
+  lon: -49.25527
+  type: Pluviométrica
+- code: 410690203A
+  name: CURITIBA - Vista Alegre
+  operator: CEMADEN
+  lat: -25.413
+  lon: -49.301
+  type: Pluviométrica
+- code: 410690204A
+  name: CURITIBA - Pilarzinho
+  operator: CEMADEN
+  lat: -25.38
+  lon: -49.295
+  type: Pluviométrica
+- code: 410690205A
+  name: CURITIBA - Boa Vista
+  operator: CEMADEN
+  lat: -25.379
+  lon: -49.245
+  type: Pluviométrica
+- code: 410690206A
+  name: CURITIBA - Santa Felicidade
+  operator: CEMADEN
+  lat: -25.382
+  lon: -49.332
+  type: Pluviométrica
+- code: 410690207A
+  name: CURITIBA - São Braz
+  operator: CEMADEN
+  lat: -25.417
+  lon: -49.342
+  type: Pluviométrica
+- code: 410690208A
+  name: CURITIBA - Atuba
+  operator: CEMADEN
+  lat: -25.384
+  lon: -49.197
+  type: Pluviométrica
+- code: 410690209A
+  name: CURITIBA - Santa Felicidade
+  operator: CEMADEN
+  lat: -25.435
+  lon: -49.35
+  type: Pluviométrica
+- code: 410690210A
+  name: CURITIBA - Umbará
+  operator: CEMADEN
+  lat: -25.555
+  lon: -49.284
+  type: Pluviométrica
+- code: 410690211A
+  name: CURITIBA - Novo Mundo
+  operator: CEMADEN
+  lat: -25.48784
+  lon: -49.28797
+  type: Pluviométrica
+- code: 410720701A
+  name: DOIS VIZINHOS - Prefeitura Municipal
+  operator: CEMADEN
+  lat: -25.74991
+  lon: -53.05351
+  type: Pluviométrica
+- code: 410765201A
+  name: FAZENDA RIO GRANDE - Nações
+  operator: CEMADEN
+  lat: -25.64902
+  lon: -49.30742
+  type: Pluviométrica
+- code: 410765202A
+  name: FAZENDA RIO GRANDE - Gralha Azul
+  operator: CEMADEN
+  lat: -25.67292
+  lon: -49.30737
+  type: Pluviométrica
+- code: 410840301A
+  name: FRANCISCO BELTRÃO - Pinheirinho
+  operator: CEMADEN
+  lat: -26.04632
+  lon: -53.06013
+  type: Pluviométrica
+- code: 410840302A
+  name: FRANCISCO BELTRÃO - São Miguel
+  operator: CEMADEN
+  lat: -26.06924
+  lon: -53.07376
+  type: Pluviométrica
+- code: 410850201A
+  name: GENERAL CARNEIRO - Centro
+  operator: CEMADEN
+  lat: -26.428
+  lon: -51.317
+  type: Pluviométrica
+- code: 410930201A
+  name: GUARANIAÇU - Centro
+  operator: CEMADEN
+  lat: -25.1
+  lon: -52.866
+  type: Pluviométrica
+- code: 410940104A
+  name: GUARAPUAVA - Vila Bela
+  operator: CEMADEN
+  lat: -25.40131
+  lon: -51.49242
+  type: Pluviométrica
+- code: 410940105A
+  name: GUARAPUAVA - Centro
+  operator: CEMADEN
+  lat: -25.35533
+  lon: -51.43377
+  type: Pluviométrica
+- code: 411070601A
+  name: IRATI - Centro
+  operator: CEMADEN
+  lat: -25.47186
+  lon: -50.65887
+  type: Pluviométrica
+- code: 411125801A
+  name: ITAPERUÇU - Centro
+  operator: CEMADEN
+  lat: -25.219
+  lon: -49.351
+  type: Pluviométrica
+- code: 411330402A
+  name: LARANJEIRAS DO SUL - G2-411330402A
+  operator: CEMADEN
+  lat: -25.4186
+  lon: -52.4192
+  type: Pluviométrica
+- code: 411330403A
+  name: LARANJEIRAS DO SUL - G2-411330403A
+  operator: CEMADEN
+  lat: -25.3871
+  lon: -52.401
+  type: Pluviométrica
+- code: 411345201A
+  name: LINDOESTE - Paço Municipal
+  operator: CEMADEN
+  lat: -25.2686
+  lon: -53.5725
+  type: Pluviométrica
+- code: 411390801A
+  name: MALLET - G2-411390801A
+  operator: CEMADEN
+  lat: -25.9461
+  lon: -50.8513
+  type: Pluviométrica
+- code: 411390802A
+  name: MALLET - G2-411390802A
+  operator: CEMADEN
+  lat: -25.8717
+  lon: -50.8123
+  type: Pluviométrica
+- code: 411390803A
+  name: MALLET - G2-411390803A
+  operator: CEMADEN
+  lat: -25.8861
+  lon: -50.8286
+  type: Pluviométrica
+- code: 411435101A
+  name: MANFRINÓPOLIS - G2-411435101A
+  operator: CEMADEN
+  lat: -26.1426
+  lon: -53.3102
+  type: Pluviométrica
+- code: 411435102A
+  name: MANFRINÓPOLIS - G2-411435102A
+  operator: CEMADEN
+  lat: -26.1492
+  lon: -53.3049
+  type: Pluviométrica
+- code: 411580401A
+  name: MEDIANEIRA - G2-411580401A
+  operator: CEMADEN
+  lat: -25.2903
+  lon: -54.0874
+  type: Pluviométrica
+- code: 411580402A
+  name: MEDIANEIRA - G2-411580402A
+  operator: CEMADEN
+  lat: -25.2031
+  lon: -54.1381
+  type: Pluviométrica
+- code: 411580403A
+  name: MEDIANEIRA - G2-411580403A
+  operator: CEMADEN
+  lat: -25.3005
+  lon: -54.1023
+  type: Pluviométrica
+- code: 411580404A
+  name: MEDIANEIRA - G2-411580404A
+  operator: CEMADEN
+  lat: -25.2897
+  lon: -54.115
+  type: Pluviométrica
+- code: 411705701A
+  name: NOVA LARANJEIRAS - Centro
+  operator: CEMADEN
+  lat: -25.30928
+  lon: -52.53703
+  type: Pluviométrica
+- code: 411850101A
+  name: PATO BRANCO - São João
+  operator: CEMADEN
+  lat: -26.234
+  lon: -52.713
+  type: Pluviométrica
+- code: 411850102A
+  name: PATO BRANCO - Alvorada
+  operator: CEMADEN
+  lat: -26.267
+  lon: -52.683
+  type: Pluviométrica
+- code: 411850103A
+  name: PATO BRANCO - Fraron
+  operator: CEMADEN
+  lat: -26.198
+  lon: -52.692
+  type: Pluviométrica
+- code: 411850104A
+  name: PATO BRANCO - Centro
+  operator: CEMADEN
+  lat: -26.228
+  lon: -52.673
+  type: Pluviométrica
+- code: 411860001A
+  name: PAULA FREITAS - G2-411860001A
+  operator: CEMADEN
+  lat: -26.1168
+  lon: -50.8655
+  type: Pluviométrica
+- code: 411860002A
+  name: PAULA FREITAS - G2-411860002A
+  operator: CEMADEN
+  lat: -26.2103
+  lon: -50.934
+  type: Pluviométrica
+- code: 411860003A
+  name: PAULA FREITAS - G2-411860003A
+  operator: CEMADEN
+  lat: -26.2107
+  lon: -50.9293
+  type: Pluviométrica
+- code: 411915201A
+  name: PINHAIS - Perdizes
+  operator: CEMADEN
+  lat: -25.39365
+  lon: -49.19005
+  type: Pluviométrica
+- code: 411915202A
+  name: PINHAIS - Jardim Claudia
+  operator: CEMADEN
+  lat: -25.39969
+  lon: -49.3997
+  type: Pluviométrica
+- code: 411915203A
+  name: PINHAIS - Jardim Atuba
+  operator: CEMADEN
+  lat: -25.39993
+  lon: -49.19294
+  type: Pluviométrica
+- code: 411915204A
+  name: PINHAIS - Estância Pinhais
+  operator: CEMADEN
+  lat: -25.43828
+  lon: -49.19911
+  type: Pluviométrica
+- code: 411915206A
+  name: PINHAIS - Maria Antonieta
+  operator: CEMADEN
+  lat: -25.44196
+  lon: -49.16435
+  type: Pluviométrica
+- code: 411915207A
+  name: PINHAIS - Weiss¢polis
+  operator: CEMADEN
+  lat: -25.46194
+  lon: -49.18684
+  type: Pluviométrica
+- code: 411950901A
+  name: PIRAQUARA - Vila Mariana
+  operator: CEMADEN
+  lat: -25.46
+  lon: -49.147
+  type: Pluviométrica
+- code: 411950902A
+  name: PIRAQUARA - Horto Municipal
+  operator: CEMADEN
+  lat: -25.472
+  lon: -49.058
+  type: Pluviométrica
+- code: 411950903A
+  name: PIRAQUARA - Jardim Santa Mônica
+  operator: CEMADEN
+  lat: -25.45
+  lon: -49.101
+  type: Pluviométrica
+- code: 412010101A
+  name: PORTO AMAZONAS - G2-412010101A
+  operator: CEMADEN
+  lat: -25.55038
+  lon: -49.89417
+  type: Pluviométrica
+- code: 412010102A
+  name: PORTO AMAZONAS - G2-412010102A
+  operator: CEMADEN
+  lat: -25.54668
+  lon: -49.88943
+  type: Pluviométrica
+- code: 412030901A
+  name: PORTO VITÓRIA - G2-412030901A
+  operator: CEMADEN
+  lat: -26.1681
+  lon: -51.2254
+  type: Pluviométrica
+- code: 412030902A
+  name: PORTO VITÓRIA - G2-412030902A
+  operator: CEMADEN
+  lat: -26.1613
+  lon: -51.2311
+  type: Pluviométrica
+- code: 412120801A
+  name: QUITANDINHA - G2-412120801A
+  operator: CEMADEN
+  lat: -25.8913
+  lon: -49.5836
+  type: Pluviométrica
+- code: 412120802A
+  name: QUITANDINHA - G2-412120802A
+  operator: CEMADEN
+  lat: -25.8708
+  lon: -49.5054
+  type: Pluviométrica
+- code: 412120803A
+  name: QUITANDINHA - G2-412120803A
+  operator: CEMADEN
+  lat: -25.9696
+  lon: -49.442
+  type: Pluviométrica
+- code: 412150501A
+  name: REBOUÇAS - G2-412150501A
+  operator: CEMADEN
+  lat: -25.6818
+  lon: -50.5582
+  type: Pluviométrica
+- code: 412220601A
+  name: RIO BRANCO DO SUL - Rio Branco do Sul l
+  operator: CEMADEN
+  lat: -25.167
+  lon: -49.309
+  type: Pluviométrica
+- code: 412220602A
+  name: RIO BRANCO DO SUL - Centro
+  operator: CEMADEN
+  lat: -25.193
+  lon: -49.313
+  type: Pluviométrica
+- code: 412220603A
+  name: RIO BRANCO DO SUL - Centro II
+  operator: CEMADEN
+  lat: -25.205
+  lon: -49.324
+  type: Pluviométrica
+- code: 412230502A
+  name: RIO NEGRO - R. Emílio Von Linzingen
+  operator: CEMADEN
+  lat: -26.089
+  lon: -49.8
+  type: Pluviométrica
+- code: 412230503A
+  name: RIO NEGRO - Vila São Judas Tadeu
+  operator: CEMADEN
+  lat: -26.118
+  lon: -49.776
+  type: Pluviométrica
+- code: 412380801A
+  name: SANTA IZABEL DO OESTE - G2-412380801A
+  operator: CEMADEN
+  lat: -25.8083
+  lon: -53.4867
+  type: Pluviométrica
+- code: 412440001A
+  name: SANTO ANTÔNIO DO SUDOESTE - G2-412440001A
+  operator: CEMADEN
+  lat: -26.058
+  lon: -53.724
+  type: Pluviométrica
+- code: 412440002A
+  name: SANTO ANTÔNIO DO SUDOESTE - G2-412440002A
+  operator: CEMADEN
+  lat: -26.0739
+  lon: -53.7176
+  type: Pluviométrica
+- code: 412480601A
+  name: SÃO JOÃO - G2-412480601A
+  operator: CEMADEN
+  lat: -25.8122
+  lon: -52.7328
+  type: Pluviométrica
+- code: 412480602A
+  name: SÃO JOÃO - G2-412480602A
+  operator: CEMADEN
+  lat: -25.8263
+  lon: -52.7286
+  type: Pluviométrica
+- code: 412550601A
+  name: SÃO JOSÉ DOS PINHAIS - Campo Largo da Roseira
+  operator: CEMADEN
+  lat: -25.674
+  lon: -49.182
+  type: Pluviométrica
+- code: 412550602A
+  name: SÃO JOSÉ DOS PINHAIS - Quississana
+  operator: CEMADEN
+  lat: -25.548
+  lon: -49.156
+  type: Pluviométrica
+- code: 412550603A
+  name: SÃO JOSÉ DOS PINHAIS - São Marcos
+  operator: CEMADEN
+  lat: -25.606
+  lon: -49.169
+  type: Pluviométrica
+- code: 412550604A
+  name: SÃO JOSÉ DOS PINHAIS - São Pedro
+  operator: CEMADEN
+  lat: -25.55
+  lon: -49.196
+  type: Pluviométrica
+- code: 412550606A
+  name: SÃO JOSÉ DOS PINHAIS - Borda do Campo
+  operator: CEMADEN
+  lat: -25.537
+  lon: -49.091
+  type: Pluviométrica
+- code: 412550607A
+  name: SÃO JOSÉ DOS PINHAIS - Afonso Pena
+  operator: CEMADEN
+  lat: -25.503
+  lon: -49.18
+  type: Pluviométrica
+- code: 412550608A
+  name: SÃO JOSÉ DOS PINHAIS - Centro
+  operator: CEMADEN
+  lat: -25.534
+  lon: -49.206
+  type: Pluviométrica
+- code: 412560501A
+  name: SÃO MATEUS DO SUL - Pinheirinho
+  operator: CEMADEN
+  lat: -25.86249
+  lon: -50.37159
+  type: Pluviométrica
+- code: 412560502A
+  name: SÃO MATEUS DO SUL - SaoMateus02
+  operator: CEMADEN
+  lat: -25.88059
+  lon: -50.41684
+  type: Pluviométrica
+- code: 412570401A
+  name: SÃO MIGUEL DO IGUAÇU - Rua Noé N. de Medeiros
+  operator: CEMADEN
+  lat: -25.373
+  lon: -54.27
+  type: Pluviométrica
+- code: 412570402A
+  name: SÃO MIGUEL DO IGUAÇU - Barro Branco
+  operator: CEMADEN
+  lat: -25.344
+  lon: -54.222
+  type: Pluviométrica
+- code: 412570403A
+  name: SÃO MIGUEL DO IGUAÇU - Centro
+  operator: CEMADEN
+  lat: -25.349
+  lon: -54.245
+  type: Pluviométrica
+- code: 412627201A
+  name: SAUDADE DO IGUAÇU - Prefeitura Municipal
+  operator: CEMADEN
+  lat: -25.69136
+  lon: -52.61733
+  type: Pluviométrica
+- code: 412665201A
+  name: SULINA - G2-412665201A
+  operator: CEMADEN
+  lat: -25.7014
+  lon: -52.721
+  type: Pluviométrica
+- code: 412665202A
+  name: SULINA - G2-412665202A
+  operator: CEMADEN
+  lat: -25.696
+  lon: -52.7251
+  type: Pluviométrica
+- code: 412820301A
+  name: UNIÃO DA VITÓRIA - Sagrada Familia
+  operator: CEMADEN
+  lat: -26.232
+  lon: -51.069
+  type: Pluviométrica
+- code: 412820302A
+  name: UNIÃO DA VITÓRIA - Rio da Praia
+  operator: CEMADEN
+  lat: -26.251
+  lon: -51.1
+  type: Pluviométrica
+- code: 420010101A
+  name: ABELARDO LUZ - Assentamento 25 maio
+  operator: CEMADEN
+  lat: -26.58667
+  lon: -52.10379
+  type: Pluviométrica
+- code: 420350101A
+  name: CAMPO ERÊ - Prefeitura Municipal
+  operator: CEMADEN
+  lat: -26.3985
+  lon: -53.0854
+  type: Pluviométrica
+- code: 420380802A
+  name: CANOINHAS - Prefeitura Municipal
+  operator: CEMADEN
+  lat: -26.17522
+  lon: -50.39492
+  type: Pluviométrica
+- code: 420500101A
+  name: DIONÍSIO CERQUEIRA - Prefeitura Municipal
+  operator: CEMADEN
+  lat: -26.26219
+  lon: -53.63747
+  type: Pluviométrica
+- code: 420560501A
+  name: GALVÃO - Escola Linha Santin
+  operator: CEMADEN
+  lat: -26.43919
+  lon: -52.68857
+  type: Pluviométrica
+- code: 420560502A
+  name: GALVÃO - Esperança
+  operator: CEMADEN
+  lat: -26.45139
+  lon: -52.68987
+  type: Pluviométrica
+- code: 420580302A
+  name: GARUVA - Estrada Geral Quiriri
+  operator: CEMADEN
+  lat: -26.11388
+  lon: -49.00358
+  type: Pluviométrica
+- code: 420790801A
+  name: IRINEÓPOLIS - Centro
+  operator: CEMADEN
+  lat: -26.23987
+  lon: -50.80416
+  type: Pluviométrica
+- code: 420810401A
+  name: ITAIÓPOLIS - Escola Rural Belmont
+  operator: CEMADEN
+  lat: -26.3014
+  lon: -49.9066
+  type: Pluviométrica
+- code: 421010001A
+  name: MAFRA - Centro
+  operator: CEMADEN
+  lat: -26.114
+  lon: -49.806
+  type: Pluviométrica
+- code: 421010005H
+  name: MAFRA - Rio da Lanca
+  operator: CEMADEN
+  lat: -26.1203
+  lon: -49.7959
+  type: Hidrológica
+- code: 421110801A
+  name: MONTE CASTELO - Bairro Novo
+  operator: CEMADEN
+  lat: -26.45387
+  lon: -50.23787
+  type: Pluviométrica
+- code: 421220501A
+  name: PAPANDUVA - Lagoa Seca
+  operator: CEMADEN
+  lat: -26.41128
+  lon: -50.14322
+  type: Pluviométrica
+- code: 421220502A
+  name: PAPANDUVA - Nova Cultura
+  operator: CEMADEN
+  lat: -26.6898
+  lon: -50.14341
+  type: Pluviométrica
+- code: 421360901A
+  name: PORTO UNIÃO - Centro
+  operator: CEMADEN
+  lat: -26.236
+  lon: -51.084
+  type: Pluviométrica
+- code: 421360902A
+  name: PORTO UNIÃO - Centro
+  operator: CEMADEN
+  lat: -26.23653
+  lon: -51.08418
+  type: Pluviométrica
+- code: 421500001A
+  name: RIO NEGRINHO - Industrial Norte
+  operator: CEMADEN
+  lat: -26.229
+  lon: -49.496
+  type: Pluviométrica
+- code: 421500002A
+  name: RIO NEGRINHO - Alegre
+  operator: CEMADEN
+  lat: -26.261
+  lon: -49.509
+  type: Pluviométrica
+- code: 421500009H
+  name: RIO NEGRINHO - Rio Negrinho
+  operator: CEMADEN
+  lat: -26.2607
+  lon: -49.511
+  type: Hidrológica
+- code: 421580201A
+  name: SÃO BENTO DO SUL - Colonial
+  operator: CEMADEN
+  lat: -26.229
+  lon: -49.41
+  type: Pluviométrica
+- code: 421825101A
+  name: TIMBÓ GRANDE - Boa Vista
+  operator: CEMADEN
+  lat: -26.61264
+  lon: -50.67652
+  type: Pluviométrica
+- code: 421830101A
+  name: TRÊS BARRAS - Defesa Civil
+  operator: CEMADEN
+  lat: -26.13026
+  lon: -50.30978
+  type: Pluviométrica
+- code: 421935802A
+  name: VITOR MEIRELES - G2-421935802A
+  operator: CEMADEN
+  lat: -26.62774
+  lon: -49.65939
+  type: Pluviométrica

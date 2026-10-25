@@ -214,7 +214,7 @@ class ANA(Source):
 
     def _parse_hws(self, rows: list[dict], start: date, end: date) -> list[Observation]:
         stations = {str(s.ana_code): s.key for s in self.cfg.stations if s.ana_code}
-        gauges = {str(g.code): g.key for g in self.cfg.gauges}
+        gauges = {str(g.code): g.key for g in self.cfg.gauges if g.network == "ana"}
         all_fields = (("Vazao_Adotada", QOBS, 1.0),
                       ("Cota_Adotada", LEVEL, 0.01),   # centímetros
                       ("Chuva_Adotada", PRECIP, 1.0))
@@ -406,7 +406,7 @@ class ANA(Source):
     def fetch(self, start: date, end: date) -> list[Observation]:
         if self.uses_hws:
             codes = [int(s.ana_code) for s in self.cfg.stations if s.ana_code]
-            codes += [g.code for g in self.cfg.gauges if g.code not in codes]
+            codes += [g.code for g in self.cfg.gauges if g.network == "ana" and g.code not in codes]
             return self._parse_hws(self._hws_rows(codes, start, end), start, end)
         out: list[Observation] = []
         for site in self.cfg.stations:

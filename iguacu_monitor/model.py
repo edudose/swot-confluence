@@ -15,10 +15,11 @@ QOBS = "qobs"      # caudal observado        [m3/s]
 LEVEL = "level"    # nivel / cota            [m]
 STORAGE = "storage"  # volumen útil          [%]
 PRECIP = "precip"  # precipitación           [mm]
+PRECIP_24H = "precip_24h"  # acumulado móvil de 24 h publicado como tal [mm]
 
 UNITS = {
     QAFL: "m3/s", QDEF: "m3/s", QTUR: "m3/s", QVER: "m3/s", QOBS: "m3/s",
-    LEVEL: "m", STORAGE: "%", PRECIP: "mm",
+    LEVEL: "m", STORAGE: "%", PRECIP: "mm", PRECIP_24H: "mm",
 }
 
 VARIABLE_ALIASES: dict[str, str] = {

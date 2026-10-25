@@ -193,6 +193,9 @@ rain_gauges:
   ana_bacia: 6           # Paraná
   ana_sub_bacia: 65      # Rios Paraná, Iguaçu e outros (se recorta con la cuenca)
   min_records_48h: 24    # mínimo de lecturas de lluvia para considerarla viva
+  # CEMADEN: pluviómetros automáticos municipales, sólo acumulado de 24 h.
+  # Se genera con `iguacu-monitor pluviometros --red cemaden`.
+  cemaden_file: config/pluviometros_cemaden.yml
 
 # ---------------------------------------------------------------------------
 # Lectura y panel
@@ -218,6 +221,15 @@ report:
   # rachas imposibles sin descartar un chaparrón intenso pero real.
   gauge_max_1h_mm: 100
   gauge_outlier_z: 6             # z robusto (mediana/MAD) para excluir un total aislado
+  # Pluviómetro seco entre vecinos con lluvia: sensor tapado o estación sin
+  # pluviómetro que transmite ceros (24/10/2026: 12 en 0 mm con vecinos de
+  # 70 a 140 mm). Sale si mide menos de gauge_dry_frac de la mediana de sus
+  # vecinos a gauge_dry_radius_km, con esa mediana sobre gauge_dry_neighbor_mm.
+  gauge_dry_radius_km: 50
+  gauge_dry_min_neighbors: 3
+  gauge_dry_neighbor_mm: 20
+  gauge_dry_frac: 0.25
+  gauge_dry_min_window_h: 6
   # Lluvia por subcuenca: pluviómetros interpolados (IDW) a esta grilla.
   subbasin_windows_h: [6, 24, 72]
   subbasin_grid_deg: 0.05
@@ -233,6 +245,12 @@ sources:
     # de fechas; hasta implementarlo, la regulación sale de ONS (horario).
     enabled: false
     url: "https://www.copel.com/mhbweb/paginas/bacia-iguacu.jsf"
+    timeout: 60
+
+  cemaden:
+    enabled: true
+    # JSONP abierto del mapa interactivo: acumulado de 24 h de cada estación.
+    url: "https://resources.cemaden.gov.br/dados/311_24.json"
     timeout: 60
 
   ana:

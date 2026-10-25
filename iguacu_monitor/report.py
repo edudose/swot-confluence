@@ -131,24 +131,84 @@ class GaugeRain:
     max_name: str
     # (nombre, total crudo en la ventana, motivo)
     excluded: list[tuple[str, float, str]] = field(default_factory=list)
+    until: datetime | None = None                      # fin de la ventana
+    by_network: dict[str, int] = field(default_factory=dict)
+    sites: frozenset[str] = frozenset()                # pluviómetros que entraron
 
 
-def gauge_window_totals(frame, cfg: Config) -> dict[int, tuple["object", list]]:
+@dataclass
+class WindowTotals:
+    """Totales por pluviómetro en una ventana, ya filtrados."""
+
+    totals: object                                     # Serie sitio -> mm
+    excluded: list[tuple[str, float, str]]
+    until: datetime | None = None                      # última lectura usada
+
+
+IMPLAUSIBLE = "lluvia por encima de lo físicamente plausible"
+ISOLATED = "total aislado"
+DRY = "seco entre vecinos con lluvia"
+
+
+def network_of(key: str) -> str:
+    return "CEMADEN" if str(key).startswith("cem_") else "ANA"
+
+
+def _dry_gauges(totals, coords, radius_km: float, min_neighbors: int,
+                neighbor_mm: float, frac: float) -> list[str]:
+    """Pluviómetros que marcan casi nada mientras sus vecinos sí miden lluvia."""
+    import numpy as np
+
+    keys = [k for k in totals.index if k in coords]
+    if len(keys) <= min_neighbors:
+        return []
+    lon = np.array([coords[k][0] for k in keys])
+    lat = np.array([coords[k][1] for k in keys])
+    vals = totals.reindex(keys).to_numpy(dtype=float)
+    dx = (lon[:, None] - lon[None, :]) * 111.2 * np.cos(np.radians(lat.mean()))
+    dy = (lat[:, None] - lat[None, :]) * 111.2
+    near = (np.hypot(dx, dy) <= radius_km) & ~np.eye(len(keys), dtype=bool)
+    out = []
+    for i, key in enumerate(keys):
+        neighbors = vals[near[i]]
+        if len(neighbors) >= min_neighbors:
+            med = float(np.median(neighbors))
+            if med >= neighbor_mm and vals[i] < frac * med:
+                out.append(key)
+    return out
+
+
+def gauge_window_totals(frame, cfg: Config) -> dict[int, WindowTotals]:
     """Totales por pluviómetro y ventana, ya filtrados por control de calidad.
 
-    Devuelve {ventana_h: (Serie sitio->total mm, excluidos)}.
+    Cada ventana termina en la última lectura de su red. ANA da series cada
+    15 min y entra en todas las ventanas. CEMADEN publica sólo el acumulado
+    de 24 h: se suma a esa ventana cuando su corte y el de ANA están a menos
+    de RAIN_STALE_H horas; si ANA quedó atrás, la ventana de 24 h usa sólo
+    CEMADEN, y si quedó atrás CEMADEN, sólo ANA.
 
     1. Un pluviómetro que supera la envolvente plausible en alguna lectura
        o en las sumas móviles de 1 h y 3 h queda fuera de esa ventana:
        recortar sólo la lectura dejaría un total parcial igual de dudoso.
-    2. Un pluviómetro entra en la ventana sólo si tiene al menos
+       El total de 24 h de CEMADEN se compara con la envolvente de 24 h.
+    2. Un pluviómetro de ANA entra en la ventana sólo si tiene al menos
        `gauge_min_coverage` de las lecturas que su paso hace esperar.
     3. Un total aislado (z robusto > `gauge_outlier_z`) queda fuera del
        agregado y se informa: el estado de calidad de ANA no lo detecta.
+    4. Un pluviómetro seco entre vecinos con lluvia (menos de
+       `gauge_dry_frac` de la mediana de los vecinos a
+       `gauge_dry_radius_km`, con al menos `gauge_dry_min_neighbors` y esa
+       mediana sobre `gauge_dry_neighbor_mm`) es un sensor tapado o una
+       estación sin pluviómetro que transmite ceros: caso real del 24/10/2026,
+       12 estaciones en 0 mm con vecinos de 70 a 140 mm. Se evalúa en
+       ventanas de `gauge_dry_min_window_h` o más; el que falla en 24 h o más
+       queda fuera de todas.
     El dato crudo no se modifica; el control se aplica al leer.
     """
     import numpy as np
     import pandas as pd
+
+    from iguacu_monitor.model import PRECIP_24H
 
     opts = cfg.report
     windows = [int(w) for w in opts.get("gauge_windows_h", (1, 3, 6, 24, 72))]
@@ -158,42 +218,53 @@ def gauge_window_totals(frame, cfg: Config) -> dict[int, tuple["object", list]]:
     def envelope(hours: float) -> float:
         return max_1h * hours ** 0.5
     z_cut = float(opts.get("gauge_outlier_z", 6))
-
-    rain = frame[frame["site"].astype(str).str.startswith("pluv_") & (frame["variable"] == PRECIP)]
-    if rain.empty:
-        return {}
-    rain = rain.sort_values(["site", "timestamp"])
     names = {g.key: g.name for g in cfg.gauges}
-    step_h = (rain.groupby("site")["timestamp"]
-                  .apply(lambda s: s.diff().median().total_seconds() / 3600 if len(s) > 1 else np.nan))
-    rain = rain.assign(step_h=rain["site"].map(step_h))
-    rain = rain[rain["step_h"].notna()]
-    if rain.empty:
-        return {}
-    by_site = rain.set_index("timestamp").groupby("site")["value"]
-    sum_1h = by_site.rolling("60min").sum().reset_index(level=0, drop=True).to_numpy()
-    sum_3h = by_site.rolling("180min").sum().reset_index(level=0, drop=True).to_numpy()
-    rain = rain.assign(impossible=(rain["value"] > envelope(1) * rain["step_h"] ** 0.5)
-                       | (sum_1h > envelope(1)) | (sum_3h > envelope(3)))
-    ref = rain["timestamp"].max()
+    coords = {g.key: (g.lon, g.lat) for g in cfg.gauges if g.lon is not None and g.lat is not None}
 
-    out: dict[int, GaugeRain] = {}
-    for window in windows:
-        sel = rain[rain["timestamp"] > ref - pd.Timedelta(hours=window)]
-        counts = sel.groupby("site")["value"].count()
-        expected = window / step_h.reindex(counts.index)
-        totals = sel.groupby("site")["value"].sum()[counts >= min_cov * expected.clip(lower=1)]
-        if totals.empty:
-            continue
+    # ventana -> [totales, excluidos, corte]
+    stage: dict[int, list] = {}
+    ref = None
+    rain = frame[frame["site"].astype(str).str.startswith("pluv_") & (frame["variable"] == PRECIP)]
+    if not rain.empty:
+        rain = rain.sort_values(["site", "timestamp"])
+        step_h = (rain.groupby("site")["timestamp"]
+                      .apply(lambda s: s.diff().median().total_seconds() / 3600 if len(s) > 1 else np.nan))
+        rain = rain.assign(step_h=rain["site"].map(step_h))
+        rain = rain[rain["step_h"].notna()]
+    if not rain.empty:
+        by_site = rain.set_index("timestamp").groupby("site")["value"]
+        sum_1h = by_site.rolling("60min").sum().reset_index(level=0, drop=True).to_numpy()
+        sum_3h = by_site.rolling("180min").sum().reset_index(level=0, drop=True).to_numpy()
+        rain = rain.assign(impossible=(rain["value"] > envelope(1) * rain["step_h"] ** 0.5)
+                           | (sum_1h > envelope(1)) | (sum_3h > envelope(3)))
+        ref = rain["timestamp"].max()
+        for window in windows:
+            sel = rain[rain["timestamp"] > ref - pd.Timedelta(hours=window)]
+            counts = sel.groupby("site")["value"].count()
+            expected = window / step_h.reindex(counts.index)
+            totals = sel.groupby("site")["value"].sum()[counts >= min_cov * expected.clip(lower=1)]
+            if totals.empty:
+                continue
+            bad = sorted(set(sel.loc[sel["impossible"], "site"]) & set(totals.index))
+            excluded = [(names.get(site, site), float(totals[site]), IMPLAUSIBLE) for site in bad]
+            stage[window] = [totals.drop(index=bad), excluded, ref]
 
-        excluded: list[tuple[str, float, str]] = []
-        bad = set(sel.loc[sel["impossible"], "site"]) & set(totals.index)
-        for site in sorted(bad):
-            excluded.append((names.get(site, site), float(totals[site]),
-                             "lluvia por encima de lo físicamente plausible"))
-        totals = totals.drop(index=sorted(bad))
-        if totals.empty:
-            continue
+    cem = frame[frame["site"].astype(str).str.startswith("cem_") & (frame["variable"] == PRECIP_24H)]
+    if 24 in windows and not cem.empty:
+        cref = cem["timestamp"].max()
+        snap = cem[cem["timestamp"] == cref].groupby("site")["value"].last()
+        gap = None if ref is None else (cref - ref).total_seconds() / 3600
+        base = stage.get(24) if gap is not None and gap <= RAIN_STALE_H else None
+        if gap is None or gap >= -RAIN_STALE_H:
+            excluded = list(base[1]) if base else []
+            bad = snap[snap > envelope(24)]
+            excluded += [(names.get(site, site), float(v), IMPLAUSIBLE) for site, v in bad.items()]
+            snap = snap.drop(index=bad.index)
+            totals = pd.concat([base[0], snap]) if base else snap
+            stage[24] = [totals, excluded, max(ref, cref) if base else cref]
+
+    for window, st in stage.items():
+        totals = st[0]
         if len(totals) >= 8:
             med = totals.median()
             # Piso de 10 mm para la dispersión: con la cuenca seca la MAD es
@@ -202,12 +273,22 @@ def gauge_window_totals(frame, cfg: Config) -> dict[int, tuple["object", list]]:
             # quedar fuera, y lo excluido siempre se informa.
             scale = max(float((totals - med).abs().median()), 10.0)
             z = 0.6745 * (totals - med) / scale
-            for site in totals[z > z_cut].index:
-                excluded.append((names.get(site, site), float(totals[site]), "total aislado"))
-            totals = totals[z <= z_cut]
+            st[1] += [(names.get(site, site), float(totals[site]), ISOLATED) for site in totals[z > z_cut].index]
+            st[0] = totals[z <= z_cut]
 
-        out[window] = (totals, excluded)
-    return out
+    dry_args = (float(opts.get("gauge_dry_radius_km", 50)), int(opts.get("gauge_dry_min_neighbors", 3)),
+                float(opts.get("gauge_dry_neighbor_mm", 20)), float(opts.get("gauge_dry_frac", 0.25)))
+    min_dry_w = int(opts.get("gauge_dry_min_window_h", 6))
+    dry_by_window = {w: set(_dry_gauges(st[0], coords, *dry_args)) for w, st in stage.items() if w >= min_dry_w}
+    dry_always = set().union(*[d for w, d in dry_by_window.items() if w >= 24])
+    for window, st in stage.items():
+        totals = st[0]
+        flagged = sorted((dry_by_window.get(window, set()) | dry_always) & set(totals.index))
+        st[1] += [(names.get(site, site), float(totals[site]), DRY) for site in flagged]
+        st[0] = totals.drop(index=flagged)
+
+    return {w: WindowTotals(totals=t, excluded=e, until=u.to_pydatetime() if u is not None else None)
+            for w, (t, e, u) in sorted(stage.items()) if not t.empty}
 
 
 def gauge_rain(frame, cfg: Config, outside: set[str] | None = None,
@@ -220,18 +301,23 @@ def gauge_rain(frame, cfg: Config, outside: set[str] | None = None,
     names = {g.key: g.name for g in cfg.gauges}
     per_window = totals_by_window if totals_by_window is not None else gauge_window_totals(frame, cfg)
     out: dict[int, GaugeRain] = {}
-    for window, (totals, excluded) in per_window.items():
+    for window, wt in per_window.items():
+        totals = wt.totals
         if outside:
             totals = totals[~totals.index.isin(outside)]
         if totals.empty:
             continue
         top = totals.idxmax()
+        nets: dict[str, int] = {}
+        for key in totals.index:
+            nets[network_of(key)] = nets.get(network_of(key), 0) + 1
         out[window] = GaugeRain(
             window_h=window, n=int(len(totals)),
             median=float(totals.median()), mean=float(totals.mean()),
             p90=float(totals.quantile(0.9)),
             max_value=float(totals.max()), max_name=names.get(top, top),
-            excluded=excluded,
+            excluded=wt.excluded, until=wt.until, by_network=nets,
+            sites=frozenset(totals.index),
         )
     return out
 
@@ -287,7 +373,7 @@ def subbasin_rain(frame, cfg: Config, now: datetime, totals_by_window) -> tuple[
     # Pluviómetros con dato válido en 24 h (o en la ventana más larga) dentro
     # de cada subcuenca: es la medida de confianza del valor interpolado.
     ref_w = 24 if 24 in totals_by_window else (max(totals_by_window) if totals_by_window else None)
-    with_data = set(totals_by_window[ref_w][0].index) if ref_w is not None else set()
+    with_data = set(totals_by_window[ref_w].totals.index) if ref_w is not None else set()
     results = {s.id: SubBasinRain(id=s.id, name=s.name, order=s.order, area_km2=s.area_km2,
                                   n_gauges=sum(1 for k in inside_keys & with_data
                                                if contains_xy(s.geom, *coords[k])))
@@ -296,7 +382,7 @@ def subbasin_rain(frame, cfg: Config, now: datetime, totals_by_window) -> tuple[
     for w in windows:
         if w not in totals_by_window:
             continue
-        totals = totals_by_window[w][0]
+        totals = totals_by_window[w].totals
         totals = totals[totals.index.isin(near_keys)]
         if len(totals) < 3:
             continue
@@ -308,13 +394,17 @@ def subbasin_rain(frame, cfg: Config, now: datetime, totals_by_window) -> tuple[
             if m.any():
                 results[s.id].gauge_mm[w] = float((grid[m] * weights[m]).sum() / weights[m].sum())
 
+    # MERGE se publica con un día de rezago: las ventanas cuentan desde el
+    # último día publicado, no desde ahora, para no quedar vacías.
     rain = frame[frame["variable"] == PRECIP]
     for s in subs:
         sel = rain[rain["site"] == s.key]
+        if sel.empty:
+            continue
+        last = sel["timestamp"].max()
         for days in (1, 3):
-            part = sel[sel["timestamp"] >= now - timedelta(days=days)]
-            if not part.empty:
-                results[s.id].merge_mm[days] = float(part["value"].sum())
+            part = sel[sel["timestamp"] > last - timedelta(days=days)]
+            results[s.id].merge_mm[days] = float(part["value"].sum())
 
     return [results[s.id] for s in subs], set(coords) - inside_keys
 
@@ -453,6 +543,7 @@ class Report:
     subbasins: list[SubBasinRain] = field(default_factory=list)
     wave: Wave | None = None
     rain_until: datetime | None = None     # última lectura de los pluviómetros
+    merge_until: datetime | None = None    # fin del último día MERGE publicado
 
     @property
     def rain_age_hours(self) -> float | None:
@@ -538,11 +629,12 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
     # --- precipitación acumulada sobre la cuenca ----------------------------
     rain = frame[(frame["variable"] == PRECIP) & (frame["site"] == "basin")]
     precip: dict[int, float] = {}
+    merge_until = rain["timestamp"].max().to_pydatetime() if not rain.empty else None
     for window in ACCUMULATION_WINDOWS:
-        cutoff = now - timedelta(days=window)
-        sel = rain[rain["timestamp"] >= cutoff]
-        if not sel.empty:
-            precip[window] = float(sel["value"].sum())
+        if merge_until is None:
+            break
+        sel = rain[rain["timestamp"] > merge_until - timedelta(days=window)]
+        precip[window] = float(sel["value"].sum())
 
     if rain.empty:
         notes.append("sin precipitación de MERGE: ¿falta cfgrib o no se corrió `fetch`?")
@@ -587,28 +679,39 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
         if state.stale and state.last_seen is not None:
             notes.append(f"{state.name}: último dato hace {state.age_hours:.0f} h")
 
-    pluv = frame[frame["site"].astype(str).str.startswith("pluv_") & (frame["variable"] == PRECIP)]
-    rain_until = pluv["timestamp"].max().to_pydatetime() if not pluv.empty else None
-    if rain_until is not None and (now - rain_until).total_seconds() / 3600 > RAIN_STALE_H:
-        notes.append(f"pluviómetros: último dato hace {(now - rain_until).total_seconds() / 3600:.0f} h")
+    from iguacu_monitor.model import PRECIP_24H
+    for net, prefix, var in (("ANA", "pluv_", PRECIP), ("CEMADEN", "cem_", PRECIP_24H)):
+        sel = frame[frame["site"].astype(str).str.startswith(prefix) & (frame["variable"] == var)]
+        if sel.empty:
+            continue
+        age = (now - sel["timestamp"].max().to_pydatetime()).total_seconds() / 3600
+        if age > RAIN_STALE_H:
+            notes.append(f"pluviómetros {net}: último dato hace {age:.0f} h")
 
     totals_by_window = gauge_window_totals(frame, cfg)
     subs, outside = subbasin_rain(frame, cfg, now, totals_by_window)
     gauges = gauge_rain(frame, cfg, outside=outside, totals_by_window=totals_by_window)
+    ref_w = 24 if 24 in gauges else (max(gauges) if gauges else None)
+    rain_until = gauges[ref_w].until if ref_w is not None else None
     flagged: dict[str, tuple[int, float, str]] = {}
     for w in sorted(gauges):
         for name, total, reason in gauges[w].excluded:
             flagged[name] = (w, total, reason)          # queda la ventana más larga
+    dry = sorted(name for name, (_, _, reason) in flagged.items() if reason == DRY)
+    if dry:
+        notes.append(f"{len(dry)} pluviómetro(s) excluidos por marcar casi nada con lluvia "
+                     f"alrededor (sensor tapado o sin pluviómetro): {', '.join(dry)}")
     for name, (w, total, reason) in flagged.items():
-        notes.append(f"pluviómetro excluido de la lluvia medida: {name} "
-                     f"({reason}; {total:,.0f} mm en {w} h)")
+        if reason != DRY:
+            notes.append(f"pluviómetro excluido de la lluvia medida: {name} "
+                         f"({reason}; {total:,.0f} mm en {w} h)")
 
     target = (cfg.report.get("panel_stations") or [None])[-1]
     wave = wave_to(target, states, cfg) if target else None
 
     return Report(generated=now, basin=cfg.basin.name, sites=states,
                   precip=precip, notes=notes, gauges=gauges, subbasins=subs, wave=wave,
-                  rain_until=rain_until)
+                  rain_until=rain_until, merge_until=merge_until)
 
 
 def render_text(report: Report) -> str:
@@ -644,13 +747,16 @@ def render_text(report: Report) -> str:
                      f"{cell(state, QOBS)}   {age}")
 
     if report.gauges:
-        lines += ["", "LLUVIA MEDIDA (mm, pluviómetros ANA; no es media areal)",
+        lines += ["", "LLUVIA MEDIDA (mm, pluviómetros ANA y CEMADEN; no es media areal)",
                   f"  {'ventana':<{name_w}}{'n':>5}{'mediana':>{num_w}}{'media':>{num_w}}"
-                  f"{'p90':>{num_w}}{'máx':>{num_w}}  dónde"]
+                  f"{'p90':>{num_w}}{'máx':>{num_w}}  hasta (UTC)   redes · dónde"]
         for w in sorted(report.gauges):
             g = report.gauges[w]
+            until = f"{g.until:%d %H:%M}" if g.until else "—"
+            nets = " + ".join(f"{k} {v}" for k, v in sorted(g.by_network.items()))
             lines.append(f"  {f'últimas {w} h':<{name_w}}{g.n:>5}{g.median:>{num_w},.1f}"
-                         f"{g.mean:>{num_w},.1f}{g.p90:>{num_w},.1f}{g.max_value:>{num_w},.1f}  {g.max_name}")
+                         f"{g.mean:>{num_w},.1f}{g.p90:>{num_w},.1f}{g.max_value:>{num_w},.1f}"
+                         f"  {until:<12}  {nets} · {g.max_name}")
 
     if report.wave and report.wave.arrivals:
         w = report.wave
