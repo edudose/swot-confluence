@@ -23,6 +23,9 @@ basin:
 # ---------------------------------------------------------------------------
 plants:
   - key: foz_do_areia
+    lat: -26.0094
+    lon: -51.6647
+    drainage_km2: 30100          # ANA, estación de barramento
     name: Foz do Areia (Gov. Bento Munhoz da Rocha Neto)
     short: Foz do Areia
     operator: COPEL
@@ -34,6 +37,9 @@ plants:
     travel_h: null                   # cabecera de la cascada
 
   - key: segredo
+    lat: -25.7883
+    lon: -52.1147
+    drainage_km2: 34400          # ANA, estación de barramento
     name: Segredo (Gov. Ney Aminthas de Barros Braga)
     short: Segredo
     operator: COPEL
@@ -45,6 +51,9 @@ plants:
     travel_h: 1
 
   - key: salto_santiago
+    lat: -25.6103
+    lon: -52.6164
+    drainage_km2: 43900          # ANA, estación de barramento
     name: Salto Santiago
     short: Santiago
     operator: ENGIE
@@ -58,6 +67,9 @@ plants:
     travel_h: null
 
   - key: salto_osorio
+    lat: -25.5331
+    lon: -53.0106
+    drainage_km2: 45800          # ANA, estación de barramento
     name: Salto Osório
     short: Osório
     operator: ENGIE
@@ -71,6 +83,9 @@ plants:
     travel_h: 1
 
   - key: salto_caxias
+    lat: -25.5419
+    lon: -53.4844
+    drainage_km2: 57100          # ANA, estación de barramento
     name: Salto Caxias (Gov. José Richa)
     short: Caxias
     operator: COPEL
@@ -84,6 +99,9 @@ plants:
     travel_h: 2
 
   - key: baixo_iguacu
+    lat: -25.5042
+    lon: -53.6722
+    drainage_km2: 61580          # ANA, estación de barramento
     name: Baixo Iguaçu
     short: Baixo
     operator: NEOENERGIA
@@ -101,6 +119,9 @@ plants:
 # ---------------------------------------------------------------------------
 stations:
   - key: porto_capanema
+    lat: -25.5667
+    lon: -53.9331
+    drainage_km2: 63900          # ANA, estación de barramento
     name: Porto Capanema
     short: Capanema
     river: Rio Iguaçu
@@ -110,6 +131,9 @@ stations:
     travel_h: 4
 
   - key: hotel_cataratas
+    lat: -25.6831
+    lon: -54.4406
+    drainage_km2: 67100          # ANA, estación de barramento
     name: Hotel Cataratas
     short: Cataratas
     river: Rio Iguaçu
@@ -121,6 +145,9 @@ stations:
     travel_h: 11
 
   - key: uniao_da_vitoria
+    lat: -26.2281
+    lon: -51.0803
+    drainage_km2: 24200          # ANA, estación de barramento
     name: União da Vitória
     short: União da Vitória
     river: Rio Iguaçu
@@ -128,6 +155,21 @@ stations:
     copel_label: null
     role: "Referencia de alto Iguazú"
     travel_h: null
+
+# ---------------------------------------------------------------------------
+# Subcuencas: áreas incrementales por punto de control
+#
+# `iguacu-monitor subcuencas` las delimita a partir del modelo de elevación y
+# escribe el GeoJSON; el monitor de rutina sólo lo lee. Se puede reemplazar
+# por otra capa (p. ej. las subcuencas de un modelo HMS) con propiedades
+# `id` y `name` por polígono.
+# ---------------------------------------------------------------------------
+subbasins:
+  file: config/subcuencas_iguacu.geojson
+  outlets: [uniao_da_vitoria, foz_do_areia, segredo, salto_santiago, salto_osorio,
+            salto_caxias, baixo_iguacu, porto_capanema, hotel_cataratas]
+  dem_res_deg: 0.0016667   # 6" (~180 m)
+  snap_min_km2: 10000      # ajustar cada punto al cauce principal
 
 # ---------------------------------------------------------------------------
 # Lluvia medida: pluviómetros telemétricos de ANA dentro de la cuenca

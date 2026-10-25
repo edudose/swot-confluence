@@ -15,6 +15,9 @@ dependencies = [
 [project.optional-dependencies]
 # Lectura de GRIB2 para la precipitación MERGE. Pesadas: se instalan aparte.
 grib = ["xarray>=2023.1", "cfgrib>=0.9.10", "eccodes>=1.6"]
+# Delimitación de subcuencas (`iguacu-monitor subcuencas`). Sólo para
+# regenerar el GeoJSON; el monitor de rutina no las necesita.
+geo = ["rasterio>=1.3", "pysheds>=0.4", "shapely>=2.0", "pyproj>=3.6"]
 
 [project.scripts]
 iguacu-monitor = "iguacu_monitor.cli:main"
