@@ -8,6 +8,10 @@ from datetime import datetime, timedelta, timezone
 from iguacu_monitor.config import Config, Site
 from iguacu_monitor.model import PRECIP, QAFL, QDEF, QOBS, QVER
 
+# Los pluviómetros de ANA reportan cada 15 min con ~1 h de demora: más de
+# 3 h sin lecturas es una actualización perdida.
+RAIN_STALE_H = 3
+
 ACCUMULATION_WINDOWS = (1, 3, 7, 30)  # días
 
 # Estados de una usina, del más grave al más leve.
@@ -448,6 +452,20 @@ class Report:
     gauges: dict[int, GaugeRain] = field(default_factory=dict)
     subbasins: list[SubBasinRain] = field(default_factory=list)
     wave: Wave | None = None
+    rain_until: datetime | None = None     # última lectura de los pluviómetros
+
+    @property
+    def rain_age_hours(self) -> float | None:
+        if self.rain_until is None:
+            return None
+        return (self.generated - self.rain_until).total_seconds() / 3600
+
+    @property
+    def rain_stale(self) -> bool:
+        """Las ventanas de lluvia terminan en la última lectura, no en la
+        hora de consulta: si ANA dejó de responder hay que decirlo."""
+        age = self.rain_age_hours
+        return age is not None and age > RAIN_STALE_H
 
     @property
     def plants(self) -> list[SiteState]:
@@ -569,6 +587,11 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
         if state.stale and state.last_seen is not None:
             notes.append(f"{state.name}: último dato hace {state.age_hours:.0f} h")
 
+    pluv = frame[frame["site"].astype(str).str.startswith("pluv_") & (frame["variable"] == PRECIP)]
+    rain_until = pluv["timestamp"].max().to_pydatetime() if not pluv.empty else None
+    if rain_until is not None and (now - rain_until).total_seconds() / 3600 > RAIN_STALE_H:
+        notes.append(f"pluviómetros: último dato hace {(now - rain_until).total_seconds() / 3600:.0f} h")
+
     totals_by_window = gauge_window_totals(frame, cfg)
     subs, outside = subbasin_rain(frame, cfg, now, totals_by_window)
     gauges = gauge_rain(frame, cfg, outside=outside, totals_by_window=totals_by_window)
@@ -584,7 +607,8 @@ def build(frame, cfg: Config, now: datetime | None = None) -> Report:
     wave = wave_to(target, states, cfg) if target else None
 
     return Report(generated=now, basin=cfg.basin.name, sites=states,
-                  precip=precip, notes=notes, gauges=gauges, subbasins=subs, wave=wave)
+                  precip=precip, notes=notes, gauges=gauges, subbasins=subs, wave=wave,
+                  rain_until=rain_until)
 
 
 def render_text(report: Report) -> str:

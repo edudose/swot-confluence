@@ -311,7 +311,7 @@ def _path(geom, xy) -> str:
     return " ".join(parts)
 
 
-def rain_section(report: Report, cfg: Config, window: int = 24) -> str:
+def rain_section(report: Report, cfg: Config, window: int = 24, tz: timezone | None = None) -> str:
     from iguacu_monitor import subbasins
 
     if not report.subbasins or not cfg.subbasins_path:
@@ -379,10 +379,12 @@ def rain_section(report: Report, cfg: Config, window: int = 24) -> str:
             f"pluviómetros dentro: su valor sale de interpolar los vecinos. " if without else "")
     who = cfg.report.get("processed_by")
     credit = f'\n    <p class="credit">Procesado por: {escape(who)}</p>' if who else ""
+    lag = (f'\n      <p class="age">Último dato de los pluviómetros: {_when(report.rain_until, tz)} '
+           f'(hace {fmt_int(report.rain_age_hours)} h)</p>' if tz and report.rain_stale else "")
     return f'''<section class="rain" aria-label="Lluvia por subcuenca">
   <div class="map-card">
     <div><h2>Lluvia por subcuenca · {window} h</h2>
-      <p class="lede">Áreas incrementales de la cascada, de la cabecera a Cataratas. Pluviómetros ANA interpolados (IDW).</p></div>
+      <p class="lede">Áreas incrementales de la cascada, de la cabecera a Cataratas. Pluviómetros ANA interpolados (IDW).</p>{lag}</div>
     <svg class="map" viewBox="0 0 1000 {height}" role="img" aria-label="Mapa de lluvia en {window} horas por subcuenca">
       {"".join(shapes)}{"".join(gauges)}{"".join(outlets)}{"".join(labels)}
     </svg>
@@ -509,6 +511,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--fo
 .rows dt { color: var(--muted); font-size: 0.9rem; }
 .rows dd { margin: 0; font-family: var(--font-num); font-weight: 600; font-size: 1.06rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .age { margin: 0; color: var(--warn); font-size: 0.82rem; }
+.rain .age { margin-top: 4px; }
 .spark { display: block; width: 100%; height: 42px; color: var(--water); }
 .spark .grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
 .spark .area { fill: currentColor; opacity: 0.16; }
@@ -640,9 +643,10 @@ def _summary(report: Report, tz: timezone | None = None) -> str:
                      f'{len(report.spilling)} de {len(with_data)} usinas</li>')
     if report.gauges:
         g = report.gauges.get(24) or report.gauges[max(report.gauges)]
+        until = f" hasta {_when(report.rain_until, tz)}" if tz and report.rain_stale else ""
         short = [f"{w} h {fmt_dec(report.gauges[w].median)}" for w in (1, 6) if w in report.gauges]
         pills.append(
-            f'<li class="pill"><span class="k">Lluvia medida {g.window_h} h</span>'
+            f'<li class="pill"><span class="k">Lluvia medida {g.window_h} h{until}</span>'
             f'mediana {fmt_dec(g.median)} mm · máx {fmt_dec(g.max_value)} mm '
             f'({escape(station_title(g.max_name))}) · {" · ".join(short + [f"{g.n} pluviómetros"])}</li>')
     if report.precip:
@@ -703,7 +707,7 @@ def render(report: Report, cfg: Config, *, note: str | None = None,
 {chr(10).join(cards)}
   </section>
   {wave_section(report, cfg, tz)}
-  {rain_section(report, cfg)}
+  {rain_section(report, cfg, tz=tz)}
   <footer class="foot">
     {f"<ul>{notes}</ul>" if notes else ""}
     <p>Fuentes: ONS (usinas, horario), ANA (caudal y pluviómetros), INPE MERGE (lluvia diaria), HydroSHEDS (subcuencas; Lehner et al., 2008) · la lluvia medida de la cabecera es la mediana de los pluviómetros, no una media areal · generado {report.generated:%Y-%m-%d %H:%M} UTC</p>

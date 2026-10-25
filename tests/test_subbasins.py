@@ -114,3 +114,20 @@ def test_panel_draws_the_rain_map():
 @pytest.mark.parametrize("mm,color", [(0, "#0d366b"), (24.9, "#184f95"), (101, "#9ec5f4"), (500, "#cde2fb")])
 def test_rain_ramp_classes(mm, color):
     assert panel.rain_color(mm) == color
+
+
+def test_stale_rain_is_flagged_with_its_last_reading():
+    cfg = _cfg()
+    fresh = report.build(_uniform_gauge_rain(1.0), cfg, now=NOW)
+    assert not fresh.rain_stale
+    page = panel.render(fresh, cfg, fragment=True)
+    assert "Último dato de los pluviómetros" not in page
+
+    # ANA deja de responder: las ventanas siguen terminando en la última
+    # lectura (sáb 22 h local) y el panel tiene que decirlo.
+    late = report.build(_uniform_gauge_rain(1.0), cfg, now=NOW + timedelta(hours=9))
+    assert late.rain_stale and late.rain_age_hours == pytest.approx(9)
+    assert any("pluviómetros: último dato hace 9 h" in n for n in late.notes)
+    page = panel.render(late, cfg, fragment=True)
+    assert "Último dato de los pluviómetros: sáb 22 h (hace 9 h)" in page
+    assert "Lluvia medida 24 h hasta sáb 22 h" in page
